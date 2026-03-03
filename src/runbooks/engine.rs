@@ -1,11 +1,73 @@
 use anyhow::Result;
 use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::template;
 use super::{Runbook, Step};
 use crate::config::Config;
+
+// ── Formatting helpers ────────────────────────────────────────────────────────
+
+/// Current wall-clock time as HH:MM:SS.
+fn now_str() -> String {
+    chrono::Local::now().format("%H:%M:%S").to_string()
+}
+
+/// Human-readable elapsed time: "8ms", "1.2s", "2m 5s".
+fn fmt_elapsed(d: Duration) -> String {
+    let ms = d.as_millis();
+    if ms < 1000 {
+        format!("{ms}ms")
+    } else if ms < 60_000 {
+        format!("{:.1}s", d.as_secs_f64())
+    } else {
+        let m = d.as_secs() / 60;
+        let s = d.as_secs() % 60;
+        format!("{m}m {s}s")
+    }
+}
+
+/// A single horizontal rule at a fixed width.
+const RULE: &str = "──────────────────────────────────────────────────────────────────────";
+
+/// One-line preview of what a step will execute (after template rendering).
+fn step_preview(step: &Step, vars: &HashMap<String, String>) -> String {
+    match step.kind.as_str() {
+        "pup" | "shell" => {
+            if let Some(run) = &step.run {
+                let rendered = template::render(run, vars);
+                // Truncate long commands
+                let preview = if rendered.len() > 72 {
+                    format!("{}…", &rendered[..71])
+                } else {
+                    rendered
+                };
+                return format!("$ {preview}");
+            }
+        }
+        "datadog-workflow" => {
+            if let Some(wid) = &step.workflow_id {
+                return format!("workflow: {}", template::render(wid, vars));
+            }
+        }
+        "http" => {
+            let method = step.method.as_deref().unwrap_or("GET");
+            if let Some(url) = &step.url {
+                return format!("{method} {}", template::render(url, vars));
+            }
+        }
+        "confirm" => {
+            if let Some(msg) = &step.message {
+                return format!("confirm: {}", template::render(msg, vars));
+            }
+        }
+        _ => {}
+    }
+    String::new()
+}
+
+// ── Main executor ─────────────────────────────────────────────────────────────
 
 /// Execute a runbook sequentially, with variable substitution and status updates.
 pub async fn run(cfg: &Config, runbook: &Runbook, vars: HashMap<String, String>) -> Result<()> {
@@ -23,64 +85,114 @@ pub async fn run(cfg: &Config, runbook: &Runbook, vars: HashMap<String, String>)
         }
     }
 
-    eprintln!("Running runbook: {}", runbook.name);
+    let runbook_start = Instant::now();
+    eprintln!("{RULE}");
+    eprintln!(
+        " Runbook: {}  ·  {} steps  ·  started {}",
+        runbook.name,
+        total,
+        now_str()
+    );
     if let Some(desc) = &runbook.description {
-        eprintln!("  {desc}");
+        eprintln!(" {desc}");
     }
-    eprintln!();
+    eprintln!("{RULE}");
 
     let mut last_failed = false;
+    let mut steps_ok: usize = 0;
 
     for (i, step) in runbook.steps.iter().enumerate() {
         let step_num = i + 1;
+        let step_start = Instant::now();
 
-        // Check when condition
+        // ── Step header ──────────────────────────────────────────────────────
+        let next_display = if step_num < total {
+            let next = &runbook.steps[i + 1];
+            format!(
+                "next: step {}/{} — {} ({})",
+                step_num + 1,
+                total,
+                next.name,
+                next.kind
+            )
+        } else {
+            "last step".to_string()
+        };
+
+        let preview = step_preview(step, &step_vars);
+        eprintln!();
+        eprintln!(
+            "► Step {step_num}/{total}  ·  {}  ·  {}  [{}]",
+            step.name,
+            step.kind,
+            now_str()
+        );
+        if !preview.is_empty() {
+            eprintln!("  {preview}");
+        }
+        eprintln!();
+
+        // ── when condition check ─────────────────────────────────────────────
         let when = step.when.as_deref().unwrap_or("on_success");
         if when == "on_success" && last_failed {
-            eprintln!(
-                "  [{step_num}/{total}] {} — skipped (previous step failed)",
-                step.name
-            );
+            eprintln!("  ⊘ skipped — previous step failed  →  {next_display}");
             continue;
         }
 
-        eprintln!("  [{step_num}/{total}] {} ...", step.name);
-
+        // ── Execute ──────────────────────────────────────────────────────────
         let result = execute_step(cfg, step, &step_vars).await;
+        let elapsed = step_start.elapsed();
 
         match result {
             Ok(output) => {
+                // Print step output, labeled
+                if !output.trim().is_empty() {
+                    eprintln!("── stdout {}", &RULE[9..]);
+                    print!("{}", output);
+                    if !output.ends_with('\n') {
+                        println!();
+                    }
+                    eprintln!("{RULE}");
+                }
+
                 if let Some(capture_var) = &step.capture {
                     step_vars.insert(capture_var.clone(), output.trim().to_string());
                 }
                 last_failed = false;
+                steps_ok += 1;
+                eprintln!("  ✓ done  {}  ·  {next_display}", fmt_elapsed(elapsed));
             }
             Err(e) => {
                 let optional = step.optional.unwrap_or(false);
                 let on_failure = step.on_failure.as_deref().unwrap_or("fail");
 
                 if optional {
-                    eprintln!(
-                        "  [{step_num}/{total}] {} — skipped (optional): {e}",
-                        step.name
-                    );
+                    eprintln!("  ⊘ skipped (optional): {e}");
+                    eprintln!("    {}  ·  {next_display}", fmt_elapsed(elapsed));
                     last_failed = false;
+                    steps_ok += 1;
                     continue;
                 }
 
+                // Show stderr content extracted from the error
+                eprintln!("── stderr {}", &RULE[9..]);
+                eprintln!("  {e}");
+                eprintln!("{RULE}");
+
                 match on_failure {
                     "warn" => {
-                        eprintln!("  [{step_num}/{total}] {} — warning: {e}", step.name);
+                        eprintln!("  ⚠ warning  {}  ·  {next_display}", fmt_elapsed(elapsed));
                         last_failed = true;
                     }
                     "confirm" => {
-                        eprintln!("  [{step_num}/{total}] {} — failed: {e}", step.name);
+                        eprintln!("  ✗ failed  {}", fmt_elapsed(elapsed));
                         if !prompt_continue(cfg)? {
                             anyhow::bail!("runbook aborted by user at step {step_num}");
                         }
                         last_failed = true;
                     }
                     _ => {
+                        eprintln!("  ✗ failed  {}", fmt_elapsed(elapsed));
                         return Err(e.context(format!("step {step_num}/{total}: {}", step.name)));
                     }
                 }
@@ -88,10 +200,26 @@ pub async fn run(cfg: &Config, runbook: &Runbook, vars: HashMap<String, String>)
         }
     }
 
+    // ── Runbook summary ──────────────────────────────────────────────────────
+    let total_elapsed = runbook_start.elapsed();
     eprintln!();
-    eprintln!("  runbook complete ({total} steps)");
+    eprintln!("{RULE}");
+    let status = if last_failed || steps_ok < total {
+        "⚠ completed with warnings"
+    } else {
+        "✓ complete"
+    };
+    eprintln!(
+        " Runbook {status}: {}  ·  {steps_ok}/{total} steps succeeded  ·  {}  ·  {}",
+        runbook.name,
+        fmt_elapsed(total_elapsed),
+        now_str()
+    );
+    eprintln!("{RULE}");
     Ok(())
 }
+
+// ── Step dispatching ──────────────────────────────────────────────────────────
 
 async fn execute_step(cfg: &Config, step: &Step, vars: &HashMap<String, String>) -> Result<String> {
     match step.kind.as_str() {
@@ -106,6 +234,8 @@ async fn execute_step(cfg: &Config, step: &Step, vars: &HashMap<String, String>)
         ),
     }
 }
+
+// ── Kind implementations ──────────────────────────────────────────────────────
 
 async fn execute_pup(cfg: &Config, step: &Step, vars: &HashMap<String, String>) -> Result<String> {
     let run = step
@@ -140,12 +270,11 @@ async fn execute_pup(cfg: &Config, step: &Step, vars: &HashMap<String, String>) 
             let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
 
             if out.status.success() && eval_condition(&stdout, &until, &mut baseline)? {
-                print!("{stdout}");
                 return Ok(stdout);
             }
 
-            let elapsed = start.elapsed().as_secs();
-            eprintln!("    ↻ polling ({elapsed}s elapsed)...");
+            let elapsed = fmt_elapsed(start.elapsed());
+            eprintln!("    ↻ polling ({elapsed} elapsed)  until: {}", poll.until);
             tokio::time::sleep(interval).await;
         }
     } else {
@@ -158,12 +287,10 @@ async fn execute_pup(cfg: &Config, step: &Step, vars: &HashMap<String, String>) 
 
         if !out.status.success() {
             let stderr = String::from_utf8_lossy(&out.stderr);
-            anyhow::bail!("pup command failed: {}", stderr.trim());
+            anyhow::bail!("{}", stderr.trim());
         }
 
-        let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
-        print!("{stdout}");
-        Ok(stdout)
+        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
     }
 }
 
@@ -182,19 +309,25 @@ async fn execute_shell(step: &Step, vars: &HashMap<String, String>) -> Result<St
         .await;
 
     match result {
-        Err(e) if optional => {
-            eprintln!("    (skipped — command not found: {e})");
-            Ok(String::new())
-        }
+        Err(e) if optional => Ok(String::new()),
         Err(e) => anyhow::bail!("failed to run shell command: {e}"),
         Ok(out) => {
-            if !out.status.success() {
-                let stderr = String::from_utf8_lossy(&out.stderr);
-                anyhow::bail!("shell command failed: {}", stderr.trim());
+            // Always surface stderr if non-empty (warnings, notices, etc.)
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            if !stderr.trim().is_empty() {
+                eprintln!("── stderr {}", &RULE[9..]);
+                eprint!("{}", stderr);
+                if !stderr.ends_with('\n') {
+                    eprintln!();
+                }
+                eprintln!("{RULE}");
             }
-            let stdout = String::from_utf8_lossy(&out.stdout).into_owned();
-            print!("{stdout}");
-            Ok(stdout)
+
+            if !out.status.success() {
+                anyhow::bail!("exited with status {}", out.status.code().unwrap_or(-1));
+            }
+
+            Ok(String::from_utf8_lossy(&out.stdout).into_owned())
         }
     }
 }
@@ -235,7 +368,7 @@ async fn execute_datadog_workflow(
         .map(String::from)
         .unwrap_or_default();
 
-    // Emit agent-mode metadata hint
+    // Emit agent-mode metadata hint to stderr
     if cfg.agent_mode || instance_id.is_empty() {
         let meta = serde_json::json!({
             "metadata": {
@@ -247,18 +380,21 @@ async fn execute_datadog_workflow(
                 )
             }
         });
-        println!("{}", serde_json::to_string_pretty(&meta).unwrap());
+        eprintln!(
+            "  [agent hint] {}",
+            serde_json::to_string(&meta).unwrap_or_default()
+        );
     }
 
     if instance_id.is_empty() {
-        return Ok(trigger_resp.to_string());
+        return Ok(serde_json::to_string_pretty(&trigger_resp).unwrap_or_default());
     }
 
-    // Auto-poll until terminal state (15s interval, up to the step's poll timeout or 10 min)
+    // Auto-poll until terminal state (15s interval)
     let poll_timeout = if let Some(poll) = &step.poll {
         template::parse_duration(&poll.timeout)?
     } else {
-        std::time::Duration::from_secs(600) // 10-minute default
+        Duration::from_secs(600)
     };
 
     let start = Instant::now();
@@ -267,9 +403,9 @@ async fn execute_datadog_workflow(
             anyhow::bail!("workflow poll timeout after {}s", poll_timeout.as_secs());
         }
 
-        let elapsed = start.elapsed().as_secs();
-        eprintln!("    ↻ [{elapsed}s elapsed] checking workflow instance status...");
-        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+        let elapsed = fmt_elapsed(start.elapsed());
+        eprintln!("    ↻ [{elapsed} elapsed]  waiting for workflow instance {instance_id}...");
+        tokio::time::sleep(Duration::from_secs(15)).await;
 
         let status_path = format!("/api/v2/workflows/{workflow_id}/instances/{instance_id}");
         let status_resp = crate::client::raw_get(cfg, &status_path)
@@ -285,12 +421,7 @@ async fn execute_datadog_workflow(
 
         match state {
             "success" => {
-                let out = status_resp.to_string();
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&status_resp).unwrap_or_default()
-                );
-                return Ok(out);
+                return Ok(serde_json::to_string_pretty(&status_resp).unwrap_or_default());
             }
             "failed" | "error" => {
                 anyhow::bail!("workflow instance {instance_id} ended with status: {state}");
@@ -309,11 +440,12 @@ fn execute_confirm(cfg: &Config, step: &Step, vars: &HashMap<String, String>) ->
     let rendered = template::render(message, vars);
 
     if cfg.auto_approve {
-        eprintln!("    {rendered} [auto-approved]");
+        eprintln!("  {rendered}");
+        eprintln!("  [auto-approved via --yes]");
         return Ok(String::new());
     }
 
-    eprint!("    {rendered} [y/N] ");
+    eprint!("  {rendered}  [y/N] ");
     io::stderr().flush().ok();
 
     let stdin = io::stdin();
@@ -323,7 +455,7 @@ fn execute_confirm(cfg: &Config, step: &Step, vars: &HashMap<String, String>) ->
     if matches!(line.trim().to_lowercase().as_str(), "y" | "yes") {
         Ok(String::new())
     } else {
-        anyhow::bail!("user declined at confirm step")
+        anyhow::bail!("user declined")
     }
 }
 
@@ -337,11 +469,9 @@ async fn execute_http(cfg: &Config, step: &Step, vars: &HashMap<String, String>)
     let method = step.method.as_deref().unwrap_or("GET").to_uppercase();
 
     let resp = if method == "GET" {
-        // Use raw_get only for paths under the configured API base
         if rendered_url.starts_with('/') {
             crate::client::raw_get(cfg, &rendered_url).await?
         } else {
-            // Absolute URL — use reqwest directly
             reqwest::Client::new()
                 .get(&rendered_url)
                 .send()
@@ -368,13 +498,11 @@ async fn execute_http(cfg: &Config, step: &Step, vars: &HashMap<String, String>)
         }
     };
 
-    let out = serde_json::to_string_pretty(&resp).unwrap_or_default();
-    println!("{out}");
-    Ok(out)
+    Ok(serde_json::to_string_pretty(&resp).unwrap_or_default())
 }
 
-/// Evaluate a poll condition against JSON output.
-/// Supported: "empty", "status == <val>", "value < N", "decreasing"
+// ── Poll condition evaluator ──────────────────────────────────────────────────
+
 fn eval_condition(output: &str, condition: &str, baseline: &mut Option<f64>) -> Result<bool> {
     let condition = condition.trim();
 
@@ -392,18 +520,13 @@ fn eval_condition(output: &str, condition: &str, baseline: &mut Option<f64>) -> 
         let v: serde_json::Value = serde_json::from_str(output).unwrap_or(serde_json::Value::Null);
         let current = extract_numeric(&v);
         if let Some(current) = current {
-            let result = if let Some(b) = *baseline {
-                current < b
-            } else {
-                false
-            };
+            let result = baseline.map(|b| current < b).unwrap_or(false);
             *baseline = Some(current);
             return Ok(result);
         }
         return Ok(false);
     }
 
-    // "status == OK"
     if let Some(rest) = condition.strip_prefix("status ==") {
         let expected = rest.trim().trim_matches('"');
         let v: serde_json::Value = serde_json::from_str(output).unwrap_or(serde_json::Value::Null);
@@ -411,7 +534,6 @@ fn eval_condition(output: &str, condition: &str, baseline: &mut Option<f64>) -> 
         return Ok(status == expected);
     }
 
-    // "value < N"
     if let Some(rest) = condition.strip_prefix("value <") {
         let threshold: f64 = rest
             .trim()
@@ -424,7 +546,6 @@ fn eval_condition(output: &str, condition: &str, baseline: &mut Option<f64>) -> 
         return Ok(false);
     }
 
-    // Unrecognized condition — treat as "always true" so polling continues once
     Ok(true)
 }
 
@@ -436,7 +557,8 @@ fn extract_numeric(v: &serde_json::Value) -> Option<f64> {
     }
 }
 
-/// Prompt the user to continue after a failure.
+// ── Prompt ────────────────────────────────────────────────────────────────────
+
 fn prompt_continue(cfg: &Config) -> Result<bool> {
     if cfg.auto_approve {
         return Ok(true);
