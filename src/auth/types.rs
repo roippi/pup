@@ -47,6 +47,8 @@ pub fn default_scopes() -> Vec<&'static str> {
         "apm_service_catalog_read",
         // Audit
         "audit_logs_read",
+        // Azure
+        "azure_configuration_read",
         // BITS
         "bits_investigations_read",
         "bits_investigations_write",
@@ -184,7 +186,7 @@ mod tests {
     #[test]
     fn test_default_scopes() {
         let scopes = default_scopes();
-        assert_eq!(scopes.len(), 68);
+        assert_eq!(scopes.len(), 69);
         assert!(scopes.contains(&"dashboards_read"));
         assert!(scopes.contains(&"monitors_read"));
         assert!(scopes.contains(&"logs_read_data"));
