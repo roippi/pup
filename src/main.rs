@@ -4740,7 +4740,8 @@ enum AuthActions {
     Logout,
     /// Check authentication status
     Status,
-    /// Print access token
+    /// Print access token (debug builds only)
+    #[cfg(debug_assertions)]
     Token,
     /// Refresh access token
     Refresh,
@@ -7015,6 +7016,7 @@ async fn main_inner() -> anyhow::Result<()> {
             AuthActions::Login => commands::auth::login(&cfg).await?,
             AuthActions::Logout => commands::auth::logout(&cfg).await?,
             AuthActions::Status => commands::auth::status(&cfg)?,
+            #[cfg(debug_assertions)]
             AuthActions::Token => commands::auth::token(&cfg)?,
             AuthActions::Refresh => commands::auth::refresh(&cfg).await?,
             AuthActions::List => commands::auth::list(&cfg)?,
