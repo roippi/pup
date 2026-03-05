@@ -6,6 +6,7 @@ use datadog_api_client::datadogV2::api_entity_risk_scores::{
 #[cfg(not(target_arch = "wasm32"))]
 use datadog_api_client::datadogV2::api_security_monitoring::{
     ListFindingsOptionalParams, ListSecurityMonitoringRulesOptionalParams,
+    ListSecurityMonitoringSuppressionsOptionalParams,
     SearchSecurityMonitoringSignalsOptionalParams, SecurityMonitoringAPI,
 };
 #[cfg(not(target_arch = "wasm32"))]
@@ -14,6 +15,8 @@ use datadog_api_client::datadogV2::model::{
     SecurityMonitoringRuleBulkExportDataType, SecurityMonitoringRuleBulkExportPayload,
     SecurityMonitoringSignalListRequest, SecurityMonitoringSignalListRequestFilter,
     SecurityMonitoringSignalListRequestPage, SecurityMonitoringSignalsSort,
+    SecurityMonitoringSuppressionCreateRequest, SecurityMonitoringSuppressionSort,
+    SecurityMonitoringSuppressionUpdateRequest,
 };
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -302,4 +305,189 @@ pub async fn risk_scores_list(cfg: &Config, query: Option<String>) -> Result<()>
     }
     let data = crate::api::get(cfg, "/api/v2/entity_risk_scores", &q).await?;
     crate::formatter::output(cfg, &data)
+}
+
+// ---- Suppressions ----
+
+#[cfg(not(target_arch = "wasm32"))]
+fn parse_suppression_sort(s: &str) -> SecurityMonitoringSuppressionSort {
+    match s {
+        "name" => SecurityMonitoringSuppressionSort::NAME,
+        "-name" => SecurityMonitoringSuppressionSort::NAME_DESCENDING,
+        "start_date" => SecurityMonitoringSuppressionSort::START_DATE,
+        "-start_date" => SecurityMonitoringSuppressionSort::START_DATE_DESCENDING,
+        "expiration_date" => SecurityMonitoringSuppressionSort::EXPIRATION_DATE,
+        "-expiration_date" => SecurityMonitoringSuppressionSort::EXPIRATION_DATE_DESCENDING,
+        "update_date" => SecurityMonitoringSuppressionSort::UPDATE_DATE,
+        "-update_date" => SecurityMonitoringSuppressionSort::UPDATE_DATE_DESCENDING,
+        "-creation_date" => SecurityMonitoringSuppressionSort::CREATION_DATE_DESCENDING,
+        "enabled" => SecurityMonitoringSuppressionSort::ENABLED,
+        "-enabled" => SecurityMonitoringSuppressionSort::ENABLED_DESCENDING,
+        _ => SecurityMonitoringSuppressionSort::NAME,
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn suppressions_list(cfg: &Config, sort: Option<String>) -> Result<()> {
+    let dd_cfg = client::make_dd_config(cfg);
+    let api = match client::make_bearer_client(cfg) {
+        Some(c) => SecurityMonitoringAPI::with_client_and_config(dd_cfg, c),
+        None => SecurityMonitoringAPI::with_config(dd_cfg),
+    };
+    let mut params = ListSecurityMonitoringSuppressionsOptionalParams::default();
+    if let Some(s) = sort {
+        params = params.sort(parse_suppression_sort(&s));
+    }
+    let resp = api
+        .list_security_monitoring_suppressions(params)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to list suppressions: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn suppressions_list(cfg: &Config, sort: Option<String>) -> Result<()> {
+    let mut q: Vec<(&str, String)> = vec![];
+    if let Some(s) = &sort {
+        q.push(("sort", s.clone()));
+    }
+    let data = crate::api::get(
+        cfg,
+        "/api/v2/security_monitoring/configuration/suppressions",
+        &q,
+    )
+    .await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn suppressions_get(cfg: &Config, suppression_id: &str) -> Result<()> {
+    let dd_cfg = client::make_dd_config(cfg);
+    let api = match client::make_bearer_client(cfg) {
+        Some(c) => SecurityMonitoringAPI::with_client_and_config(dd_cfg, c),
+        None => SecurityMonitoringAPI::with_config(dd_cfg),
+    };
+    let resp = api
+        .get_security_monitoring_suppression(suppression_id.to_string())
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to get suppression: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn suppressions_get(cfg: &Config, suppression_id: &str) -> Result<()> {
+    let data = crate::api::get(
+        cfg,
+        &format!("/api/v2/security_monitoring/configuration/suppressions/{suppression_id}"),
+        &[],
+    )
+    .await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn suppressions_create(cfg: &Config, file: &str) -> Result<()> {
+    let body: SecurityMonitoringSuppressionCreateRequest = util::read_json_file(file)?;
+    let dd_cfg = client::make_dd_config(cfg);
+    let api = match client::make_bearer_client(cfg) {
+        Some(c) => SecurityMonitoringAPI::with_client_and_config(dd_cfg, c),
+        None => SecurityMonitoringAPI::with_config(dd_cfg),
+    };
+    let resp = api
+        .create_security_monitoring_suppression(body)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to create suppression: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn suppressions_create(cfg: &Config, file: &str) -> Result<()> {
+    let body: serde_json::Value = util::read_json_file(file)?;
+    let data = crate::api::post(
+        cfg,
+        "/api/v2/security_monitoring/configuration/suppressions",
+        &body,
+    )
+    .await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn suppressions_update(cfg: &Config, suppression_id: &str, file: &str) -> Result<()> {
+    let body: SecurityMonitoringSuppressionUpdateRequest = util::read_json_file(file)?;
+    let dd_cfg = client::make_dd_config(cfg);
+    let api = match client::make_bearer_client(cfg) {
+        Some(c) => SecurityMonitoringAPI::with_client_and_config(dd_cfg, c),
+        None => SecurityMonitoringAPI::with_config(dd_cfg),
+    };
+    let resp = api
+        .update_security_monitoring_suppression(suppression_id.to_string(), body)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to update suppression: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn suppressions_update(cfg: &Config, suppression_id: &str, file: &str) -> Result<()> {
+    let body: serde_json::Value = util::read_json_file(file)?;
+    let data = crate::api::patch(
+        cfg,
+        &format!("/api/v2/security_monitoring/configuration/suppressions/{suppression_id}"),
+        &body,
+    )
+    .await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn suppressions_delete(cfg: &Config, suppression_id: &str) -> Result<()> {
+    let dd_cfg = client::make_dd_config(cfg);
+    let api = match client::make_bearer_client(cfg) {
+        Some(c) => SecurityMonitoringAPI::with_client_and_config(dd_cfg, c),
+        None => SecurityMonitoringAPI::with_config(dd_cfg),
+    };
+    api.delete_security_monitoring_suppression(suppression_id.to_string())
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to delete suppression: {e:?}"))?;
+    println!("Suppression '{suppression_id}' deleted.");
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn suppressions_delete(cfg: &Config, suppression_id: &str) -> Result<()> {
+    crate::api::delete(
+        cfg,
+        &format!("/api/v2/security_monitoring/configuration/suppressions/{suppression_id}"),
+    )
+    .await?;
+    println!("Suppression '{suppression_id}' deleted.");
+    Ok(())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn suppressions_validate(cfg: &Config, file: &str) -> Result<()> {
+    let body: SecurityMonitoringSuppressionCreateRequest = util::read_json_file(file)?;
+    let dd_cfg = client::make_dd_config(cfg);
+    let api = match client::make_bearer_client(cfg) {
+        Some(c) => SecurityMonitoringAPI::with_client_and_config(dd_cfg, c),
+        None => SecurityMonitoringAPI::with_config(dd_cfg),
+    };
+    api.validate_security_monitoring_suppression(body)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to validate suppression: {e:?}"))?;
+    println!("Suppression is valid.");
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn suppressions_validate(cfg: &Config, file: &str) -> Result<()> {
+    let body: serde_json::Value = util::read_json_file(file)?;
+    crate::api::post(
+        cfg,
+        "/api/v2/security_monitoring/configuration/suppressions/validation",
+        &body,
+    )
+    .await?;
+    println!("Suppression is valid.");
+    Ok(())
 }

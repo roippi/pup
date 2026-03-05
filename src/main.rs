@@ -2500,6 +2500,11 @@ enum SecurityActions {
         #[command(subcommand)]
         action: SecurityRiskScoreActions,
     },
+    /// Manage security suppression rules
+    Suppressions {
+        #[command(subcommand)]
+        action: SecuritySuppressionActions,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2563,6 +2568,35 @@ enum SecurityRiskScoreActions {
     List {
         #[arg(long)]
         query: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum SecuritySuppressionActions {
+    /// List suppression rules
+    List {
+        #[arg(long, help = "Sort order (name, -name, start_date, -start_date, expiration_date, -expiration_date, update_date, -update_date, -creation_date, enabled, -enabled)")]
+        sort: Option<String>,
+    },
+    /// Get suppression rule details
+    Get { suppression_id: String },
+    /// Create a suppression rule
+    Create {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Update a suppression rule
+    Update {
+        suppression_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Delete a suppression rule
+    Delete { suppression_id: String },
+    /// Validate a suppression rule
+    Validate {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
     },
 }
 
@@ -3598,6 +3632,35 @@ enum StatusPageActions {
     ThirdParty {
         #[command(subcommand)]
         action: StatusPageThirdPartyActions,
+    },
+    /// Manage status page maintenances
+    Maintenances {
+        #[command(subcommand)]
+        action: StatusPageMaintenanceActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum StatusPageMaintenanceActions {
+    /// List all maintenances
+    List,
+    /// Get maintenance details
+    Get {
+        page_id: String,
+        maintenance_id: String,
+    },
+    /// Create a maintenance
+    Create {
+        page_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Update a maintenance
+    Update {
+        page_id: String,
+        maintenance_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
     },
 }
 
@@ -5461,6 +5524,30 @@ async fn main_inner() -> anyhow::Result<()> {
                         commands::security::risk_scores_list(&cfg, query).await?;
                     }
                 },
+                SecurityActions::Suppressions { action } => match action {
+                    SecuritySuppressionActions::List { sort } => {
+                        commands::security::suppressions_list(&cfg, sort).await?;
+                    }
+                    SecuritySuppressionActions::Get { suppression_id } => {
+                        commands::security::suppressions_get(&cfg, &suppression_id).await?;
+                    }
+                    SecuritySuppressionActions::Create { file } => {
+                        commands::security::suppressions_create(&cfg, &file).await?;
+                    }
+                    SecuritySuppressionActions::Update {
+                        suppression_id,
+                        file,
+                    } => {
+                        commands::security::suppressions_update(&cfg, &suppression_id, &file)
+                            .await?;
+                    }
+                    SecuritySuppressionActions::Delete { suppression_id } => {
+                        commands::security::suppressions_delete(&cfg, &suppression_id).await?;
+                    }
+                    SecuritySuppressionActions::Validate { file } => {
+                        commands::security::suppressions_validate(&cfg, &file).await?;
+                    }
+                },
             }
         }
         // --- Organizations ---
@@ -6136,6 +6223,34 @@ async fn main_inner() -> anyhow::Result<()> {
                 StatusPageThirdPartyActions::List { active, search } => {
                     commands::status_pages::third_party_list(&cfg, search.as_deref(), active)
                         .await?;
+                }
+            },
+            StatusPageActions::Maintenances { action } => match action {
+                StatusPageMaintenanceActions::List => {
+                    commands::status_pages::maintenances_list(&cfg).await?;
+                }
+                StatusPageMaintenanceActions::Get {
+                    page_id,
+                    maintenance_id,
+                } => {
+                    commands::status_pages::maintenances_get(&cfg, &page_id, &maintenance_id)
+                        .await?;
+                }
+                StatusPageMaintenanceActions::Create { page_id, file } => {
+                    commands::status_pages::maintenances_create(&cfg, &page_id, &file).await?;
+                }
+                StatusPageMaintenanceActions::Update {
+                    page_id,
+                    maintenance_id,
+                    file,
+                } => {
+                    commands::status_pages::maintenances_update(
+                        &cfg,
+                        &page_id,
+                        &maintenance_id,
+                        &file,
+                    )
+                    .await?;
                 }
             },
         },
