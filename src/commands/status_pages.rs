@@ -6,16 +6,19 @@ use crate::util;
 use anyhow::{bail, Result};
 #[cfg(not(target_arch = "wasm32"))]
 use datadog_api_client::datadogV2::api_status_pages::{
-    CreateComponentOptionalParams, CreateDegradationOptionalParams, CreateStatusPageOptionalParams,
-    GetComponentOptionalParams, GetDegradationOptionalParams, GetStatusPageOptionalParams,
-    ListComponentsOptionalParams, ListDegradationsOptionalParams, ListStatusPagesOptionalParams,
-    StatusPagesAPI, UpdateComponentOptionalParams, UpdateDegradationOptionalParams,
+    CreateComponentOptionalParams, CreateDegradationOptionalParams,
+    CreateMaintenanceOptionalParams, CreateStatusPageOptionalParams, GetComponentOptionalParams,
+    GetDegradationOptionalParams, GetMaintenanceOptionalParams, GetStatusPageOptionalParams,
+    ListComponentsOptionalParams, ListDegradationsOptionalParams, ListMaintenancesOptionalParams,
+    ListStatusPagesOptionalParams, StatusPagesAPI, UpdateComponentOptionalParams,
+    UpdateDegradationOptionalParams, UpdateMaintenanceOptionalParams,
     UpdateStatusPageOptionalParams,
 };
 #[cfg(not(target_arch = "wasm32"))]
 use datadog_api_client::datadogV2::model::{
-    CreateComponentRequest, CreateDegradationRequest, CreateStatusPageRequest,
-    PatchComponentRequest, PatchDegradationRequest, PatchStatusPageRequest,
+    CreateComponentRequest, CreateDegradationRequest, CreateMaintenanceRequest,
+    CreateStatusPageRequest, PatchComponentRequest, PatchDegradationRequest,
+    PatchMaintenanceRequest, PatchStatusPageRequest,
 };
 
 // ---------------------------------------------------------------------------
@@ -405,6 +408,122 @@ pub async fn components_create(cfg: &Config, page_id: &str, file: &str) -> Resul
     let data = crate::api::post(
         cfg,
         &format!("/api/v2/status_pages/{page_id}/components"),
+        &body,
+    )
+    .await?;
+    crate::formatter::output(cfg, &data)
+}
+
+// ---------------------------------------------------------------------------
+// Maintenances
+// ---------------------------------------------------------------------------
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn maintenances_list(cfg: &Config) -> Result<()> {
+    let api = make_api(cfg);
+    let resp = api
+        .list_maintenances(ListMaintenancesOptionalParams::default())
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to list maintenances: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn maintenances_list(cfg: &Config) -> Result<()> {
+    let data = crate::api::get(cfg, "/api/v2/status_pages/maintenances", &[]).await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn maintenances_get(cfg: &Config, page_id: &str, maintenance_id: &str) -> Result<()> {
+    let api = make_api(cfg);
+    let page_uuid = util::parse_uuid(page_id, "page")?;
+    let maintenance_uuid = util::parse_uuid(maintenance_id, "maintenance")?;
+    let resp = api
+        .get_maintenance(
+            page_uuid,
+            maintenance_uuid,
+            GetMaintenanceOptionalParams::default(),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to get maintenance: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn maintenances_get(cfg: &Config, page_id: &str, maintenance_id: &str) -> Result<()> {
+    util::parse_uuid(page_id, "page")?;
+    util::parse_uuid(maintenance_id, "maintenance")?;
+    let data = crate::api::get(
+        cfg,
+        &format!("/api/v2/statuspages/{page_id}/maintenances/{maintenance_id}"),
+        &[],
+    )
+    .await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn maintenances_create(cfg: &Config, page_id: &str, file: &str) -> Result<()> {
+    let page_uuid = util::parse_uuid(page_id, "page")?;
+    let body: CreateMaintenanceRequest = util::read_json_file(file)?;
+    let api = make_api(cfg);
+    let resp = api
+        .create_maintenance(page_uuid, body, CreateMaintenanceOptionalParams::default())
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to create maintenance: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn maintenances_create(cfg: &Config, page_id: &str, file: &str) -> Result<()> {
+    util::parse_uuid(page_id, "page")?;
+    let body: serde_json::Value = util::read_json_file(file)?;
+    let data = crate::api::post(
+        cfg,
+        &format!("/api/v2/statuspages/{page_id}/maintenances"),
+        &body,
+    )
+    .await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn maintenances_update(
+    cfg: &Config,
+    page_id: &str,
+    maintenance_id: &str,
+    file: &str,
+) -> Result<()> {
+    let page_uuid = util::parse_uuid(page_id, "page")?;
+    let maintenance_uuid = util::parse_uuid(maintenance_id, "maintenance")?;
+    let body: PatchMaintenanceRequest = util::read_json_file(file)?;
+    let api = make_api(cfg);
+    let resp = api
+        .update_maintenance(
+            page_uuid,
+            maintenance_uuid,
+            body,
+            UpdateMaintenanceOptionalParams::default(),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to update maintenance: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn maintenances_update(
+    cfg: &Config,
+    page_id: &str,
+    maintenance_id: &str,
+    file: &str,
+) -> Result<()> {
+    util::parse_uuid(page_id, "page")?;
+    util::parse_uuid(maintenance_id, "maintenance")?;
+    let body: serde_json::Value = util::read_json_file(file)?;
+    let data = crate::api::patch(
+        cfg,
+        &format!("/api/v2/statuspages/{page_id}/maintenances/{maintenance_id}"),
         &body,
     )
     .await?;

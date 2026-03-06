@@ -190,6 +190,20 @@ static UNSTABLE_OPS: &[&str] = &[
     // Flaky Tests (2)
     "v2.search_flaky_tests",
     "v2.update_flaky_tests",
+    // Incidents Import (1)
+    "v2.import_incident",
+    // Change Management (6)
+    "v2.create_change_request",
+    "v2.create_change_request_branch",
+    "v2.delete_change_request_decision",
+    "v2.get_change_request",
+    "v2.update_change_request",
+    "v2.update_change_request_decision",
+    // Cloud Authentication (4)
+    "v2.create_aws_cloud_auth_persona_mapping",
+    "v2.delete_aws_cloud_auth_persona_mapping",
+    "v2.get_aws_cloud_auth_persona_mapping",
+    "v2.list_aws_cloud_auth_persona_mappings",
 ];
 
 // ---------------------------------------------------------------------------
@@ -538,7 +552,7 @@ mod tests {
 
     #[test]
     fn test_unstable_ops_count() {
-        assert_eq!(UNSTABLE_OPS.len(), 65);
+        assert_eq!(UNSTABLE_OPS.len(), 76);
     }
 
     #[test]

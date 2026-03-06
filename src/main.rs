@@ -1359,6 +1359,12 @@ enum Commands {
         #[command(subcommand)]
         action: OrgActions,
     },
+    /// Manage change requests
+    #[command(name = "change-requests")]
+    ChangeManagement {
+        #[command(subcommand)]
+        action: ChangeManagementActions,
+    },
     /// Send product analytics events
     ///
     /// Send server-side product analytics events to Datadog.
@@ -2014,6 +2020,11 @@ enum IncidentActions {
         #[command(subcommand)]
         action: IncidentPostmortemActions,
     },
+    /// Import an incident
+    Import {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2412,6 +2423,11 @@ enum UserActions {
         #[command(subcommand)]
         action: UserRoleActions,
     },
+    /// Manage seat assignments
+    Seats {
+        #[command(subcommand)]
+        action: SeatsActions,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2500,6 +2516,11 @@ enum SecurityActions {
         #[command(subcommand)]
         action: SecurityRiskScoreActions,
     },
+    /// Manage security suppression rules
+    Suppressions {
+        #[command(subcommand)]
+        action: SecuritySuppressionActions,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2508,6 +2529,11 @@ enum SecurityRuleActions {
     List {
         #[arg(long, help = "Filter query")]
         filter: Option<String>,
+        #[arg(
+            long,
+            help = "Sort order (name, -name, creation_date, -creation_date, update_date, -update_date, enabled, -enabled, type, -type, highest_severity, -highest_severity, source, -source)"
+        )]
+        sort: Option<String>,
     },
     /// Get rule details
     Get { rule_id: String },
@@ -2564,6 +2590,180 @@ enum SecurityRiskScoreActions {
         #[arg(long)]
         query: Option<String>,
     },
+}
+
+#[derive(Subcommand)]
+enum SecuritySuppressionActions {
+    /// List suppression rules
+    List {
+        #[arg(
+            long,
+            help = "Sort order (name, -name, start_date, -start_date, expiration_date, -expiration_date, update_date, -update_date, -creation_date, enabled, -enabled)"
+        )]
+        sort: Option<String>,
+    },
+    /// Get suppression rule details
+    Get { suppression_id: String },
+    /// Create a suppression rule
+    Create {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Update a suppression rule
+    Update {
+        suppression_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Delete a suppression rule
+    Delete { suppression_id: String },
+    /// Validate a suppression rule
+    Validate {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+}
+
+// ---- Seats ----
+#[derive(Subcommand)]
+enum SeatsActions {
+    /// Manage seat assignments
+    Users {
+        #[command(subcommand)]
+        action: SeatsUserActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum SeatsUserActions {
+    /// List users with seats
+    List {
+        #[arg(long, help = "Product (e.g. incident_response)")]
+        product: String,
+        #[arg(long, default_value_t = 100, help = "Page limit")]
+        limit: i32,
+    },
+    /// Assign seats to users
+    Assign {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Unassign seats from users
+    Unassign {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+}
+
+// ---- Change Management ----
+#[derive(Subcommand)]
+enum ChangeManagementActions {
+    /// Create a change request
+    Create {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Get a change request
+    Get { change_request_id: String },
+    /// Update a change request
+    Update {
+        change_request_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Create a branch for a change request
+    #[command(name = "create-branch")]
+    CreateBranch {
+        change_request_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Manage change request decisions
+    Decisions {
+        #[command(subcommand)]
+        action: ChangeRequestDecisionActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum ChangeRequestDecisionActions {
+    /// Delete a decision
+    Delete {
+        change_request_id: String,
+        decision_id: String,
+    },
+    /// Update a decision
+    Update {
+        change_request_id: String,
+        decision_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+}
+
+// ---- Cloud Authentication ----
+#[derive(Subcommand)]
+enum CloudAuthActions {
+    /// Manage AWS persona mappings
+    #[command(name = "persona-mappings")]
+    PersonaMappings {
+        #[command(subcommand)]
+        action: CloudAuthPersonaMappingActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum CloudAuthPersonaMappingActions {
+    /// List persona mappings
+    List,
+    /// Get a persona mapping
+    Get { mapping_id: String },
+    /// Create a persona mapping
+    Create {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Delete a persona mapping
+    Delete { mapping_id: String },
+}
+
+// ---- Google Chat Integration ----
+#[derive(Subcommand)]
+enum GoogleChatActions {
+    /// Manage organization handles
+    Handles {
+        #[command(subcommand)]
+        action: GoogleChatHandleActions,
+    },
+    /// Get a space by display name
+    #[command(name = "space-get")]
+    SpaceGet {
+        domain_name: String,
+        space_display_name: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum GoogleChatHandleActions {
+    /// List organization handles
+    List { org_id: String },
+    /// Get an organization handle
+    Get { org_id: String, handle_id: String },
+    /// Create an organization handle
+    Create {
+        org_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Update an organization handle
+    Update {
+        org_id: String,
+        handle_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Delete an organization handle
+    Delete { org_id: String, handle_id: String },
 }
 
 // ---- Organizations ----
@@ -3599,6 +3799,35 @@ enum StatusPageActions {
         #[command(subcommand)]
         action: StatusPageThirdPartyActions,
     },
+    /// Manage status page maintenances
+    Maintenances {
+        #[command(subcommand)]
+        action: StatusPageMaintenanceActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum StatusPageMaintenanceActions {
+    /// List all maintenances
+    List,
+    /// Get maintenance details
+    Get {
+        page_id: String,
+        maintenance_id: String,
+    },
+    /// Create a maintenance
+    Create {
+        page_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Update a maintenance
+    Update {
+        page_id: String,
+        maintenance_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -3697,6 +3926,8 @@ enum StatusPageThirdPartyActions {
 // ---- Integrations ----
 #[derive(Subcommand)]
 enum IntegrationActions {
+    /// List all configured integrations
+    List,
     /// Manage Jira integration
     Jira {
         #[command(subcommand)]
@@ -3721,6 +3952,27 @@ enum IntegrationActions {
     Webhooks {
         #[command(subcommand)]
         action: WebhooksActions,
+    },
+    /// Manage Google Chat integration
+    #[command(name = "google-chat")]
+    GoogleChat {
+        #[command(subcommand)]
+        action: GoogleChatActions,
+    },
+    /// Manage AWS integrations
+    Aws {
+        #[command(subcommand)]
+        action: IntegrationAwsActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum IntegrationAwsActions {
+    /// Manage AWS cloud authentication
+    #[command(name = "cloud-auth")]
+    CloudAuth {
+        #[command(subcommand)]
+        action: CloudAuthActions,
     },
 }
 
@@ -4082,10 +4334,15 @@ enum NetworkActions {
         #[command(subcommand)]
         action: NetworkFlowActions,
     },
-    /// List network devices
+    /// Manage network devices
     Devices {
         #[command(subcommand)]
         action: NetworkDeviceActions,
+    },
+    /// Manage network interface tags
+    Interfaces {
+        #[command(subcommand)]
+        action: NetworkInterfaceTagActions,
     },
 }
 
@@ -4099,6 +4356,43 @@ enum NetworkFlowActions {
 enum NetworkDeviceActions {
     /// List network devices
     List,
+    /// Get device details
+    Get { device_id: String },
+    /// List interfaces for a device
+    Interfaces {
+        device_id: String,
+        #[arg(long, help = "Include IP addresses")]
+        ip_addresses: bool,
+    },
+    /// Manage device tags
+    Tags {
+        #[command(subcommand)]
+        action: NetworkDeviceTagActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum NetworkDeviceTagActions {
+    /// List tags for a device
+    List { device_id: String },
+    /// Update tags for a device
+    Update {
+        device_id: String,
+        #[arg(long, help = "JSON file with tags body (required)")]
+        file: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum NetworkInterfaceTagActions {
+    /// List tags for an interface
+    List { interface_id: String },
+    /// Update tags for an interface
+    Update {
+        interface_id: String,
+        #[arg(long, help = "JSON file with tags body (required)")]
+        file: String,
+    },
 }
 
 // ---- Obs Pipelines (placeholder) ----
@@ -4281,6 +4575,25 @@ enum ProductAnalyticsActions {
         #[command(subcommand)]
         action: ProductAnalyticsEventActions,
     },
+    /// Run product analytics queries
+    Query {
+        #[command(subcommand)]
+        action: ProductAnalyticsQueryActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum ProductAnalyticsQueryActions {
+    /// Compute scalar analytics
+    Scalar {
+        #[arg(long, help = "JSON file with query body (required)")]
+        file: String,
+    },
+    /// Compute timeseries analytics
+    Timeseries {
+        #[arg(long, help = "JSON file with query body (required)")]
+        file: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -4427,7 +4740,8 @@ enum AuthActions {
     Logout,
     /// Check authentication status
     Status,
-    /// Print access token
+    /// Print access token (debug builds only)
+    #[cfg(debug_assertions)]
     Token,
     /// Refresh access token
     Refresh,
@@ -5200,6 +5514,9 @@ async fn main_inner() -> anyhow::Result<()> {
                             .await?;
                     }
                 },
+                IncidentActions::Import { file } => {
+                    commands::incidents::import(&cfg, &file).await?;
+                }
             }
         }
         // --- Dashboards ---
@@ -5377,6 +5694,19 @@ async fn main_inner() -> anyhow::Result<()> {
                 UserActions::Roles { action } => match action {
                     UserRoleActions::List => commands::users::roles_list(&cfg).await?,
                 },
+                UserActions::Seats { action } => match action {
+                    SeatsActions::Users { action } => match action {
+                        SeatsUserActions::List { product, limit } => {
+                            commands::seats::users_list(&cfg, &product, limit).await?;
+                        }
+                        SeatsUserActions::Assign { file } => {
+                            commands::seats::users_assign(&cfg, &file).await?;
+                        }
+                        SeatsUserActions::Unassign { file } => {
+                            commands::seats::users_unassign(&cfg, &file).await?;
+                        }
+                    },
+                },
             }
         }
         // --- Infrastructure ---
@@ -5419,8 +5749,8 @@ async fn main_inner() -> anyhow::Result<()> {
             cfg.validate_auth()?;
             match action {
                 SecurityActions::Rules { action } => match action {
-                    SecurityRuleActions::List { .. } => {
-                        commands::security::rules_list(&cfg).await?
+                    SecurityRuleActions::List { sort, .. } => {
+                        commands::security::rules_list(&cfg, sort).await?
                     }
                     SecurityRuleActions::Get { rule_id } => {
                         commands::security::rules_get(&cfg, &rule_id).await?;
@@ -5461,6 +5791,30 @@ async fn main_inner() -> anyhow::Result<()> {
                         commands::security::risk_scores_list(&cfg, query).await?;
                     }
                 },
+                SecurityActions::Suppressions { action } => match action {
+                    SecuritySuppressionActions::List { sort } => {
+                        commands::security::suppressions_list(&cfg, sort).await?;
+                    }
+                    SecuritySuppressionActions::Get { suppression_id } => {
+                        commands::security::suppressions_get(&cfg, &suppression_id).await?;
+                    }
+                    SecuritySuppressionActions::Create { file } => {
+                        commands::security::suppressions_create(&cfg, &file).await?;
+                    }
+                    SecuritySuppressionActions::Update {
+                        suppression_id,
+                        file,
+                    } => {
+                        commands::security::suppressions_update(&cfg, &suppression_id, &file)
+                            .await?;
+                    }
+                    SecuritySuppressionActions::Delete { suppression_id } => {
+                        commands::security::suppressions_delete(&cfg, &suppression_id).await?;
+                    }
+                    SecuritySuppressionActions::Validate { file } => {
+                        commands::security::suppressions_validate(&cfg, &file).await?;
+                    }
+                },
             }
         }
         // --- Organizations ---
@@ -5469,6 +5823,57 @@ async fn main_inner() -> anyhow::Result<()> {
             match action {
                 OrgActions::List => commands::organizations::list(&cfg).await?,
                 OrgActions::Get => commands::organizations::get(&cfg).await?,
+            }
+        }
+        // --- Change Management ---
+        Commands::ChangeManagement { action } => {
+            cfg.validate_auth()?;
+            match action {
+                ChangeManagementActions::Create { file } => {
+                    commands::change_management::create(&cfg, &file).await?;
+                }
+                ChangeManagementActions::Get { change_request_id } => {
+                    commands::change_management::get(&cfg, &change_request_id).await?;
+                }
+                ChangeManagementActions::Update {
+                    change_request_id,
+                    file,
+                } => {
+                    commands::change_management::update(&cfg, &change_request_id, &file).await?;
+                }
+                ChangeManagementActions::CreateBranch {
+                    change_request_id,
+                    file,
+                } => {
+                    commands::change_management::create_branch(&cfg, &change_request_id, &file)
+                        .await?;
+                }
+                ChangeManagementActions::Decisions { action } => match action {
+                    ChangeRequestDecisionActions::Delete {
+                        change_request_id,
+                        decision_id,
+                    } => {
+                        commands::change_management::delete_decision(
+                            &cfg,
+                            &change_request_id,
+                            &decision_id,
+                        )
+                        .await?;
+                    }
+                    ChangeRequestDecisionActions::Update {
+                        change_request_id,
+                        decision_id,
+                        file,
+                    } => {
+                        commands::change_management::update_decision(
+                            &cfg,
+                            &change_request_id,
+                            &decision_id,
+                            &file,
+                        )
+                        .await?;
+                    }
+                },
             }
         }
         // --- Cloud ---
@@ -6138,11 +6543,42 @@ async fn main_inner() -> anyhow::Result<()> {
                         .await?;
                 }
             },
+            StatusPageActions::Maintenances { action } => match action {
+                StatusPageMaintenanceActions::List => {
+                    commands::status_pages::maintenances_list(&cfg).await?;
+                }
+                StatusPageMaintenanceActions::Get {
+                    page_id,
+                    maintenance_id,
+                } => {
+                    commands::status_pages::maintenances_get(&cfg, &page_id, &maintenance_id)
+                        .await?;
+                }
+                StatusPageMaintenanceActions::Create { page_id, file } => {
+                    commands::status_pages::maintenances_create(&cfg, &page_id, &file).await?;
+                }
+                StatusPageMaintenanceActions::Update {
+                    page_id,
+                    maintenance_id,
+                    file,
+                } => {
+                    commands::status_pages::maintenances_update(
+                        &cfg,
+                        &page_id,
+                        &maintenance_id,
+                        &file,
+                    )
+                    .await?;
+                }
+            },
         },
         // --- Integrations ---
         Commands::Integrations { action } => {
             cfg.validate_auth()?;
             match action {
+                IntegrationActions::List => {
+                    commands::integrations::list(&cfg).await?;
+                }
                 IntegrationActions::Jira { action } => match action {
                     JiraActions::Accounts { action } => match action {
                         JiraAccountActions::List => {
@@ -6242,6 +6678,58 @@ async fn main_inner() -> anyhow::Result<()> {
                 },
                 IntegrationActions::Webhooks { action } => match action {
                     WebhooksActions::List => commands::integrations::webhooks_list(&cfg).await?,
+                },
+                IntegrationActions::GoogleChat { action } => match action {
+                    GoogleChatActions::Handles { action } => match action {
+                        GoogleChatHandleActions::List { org_id } => {
+                            commands::google_chat::handles_list(&cfg, &org_id).await?;
+                        }
+                        GoogleChatHandleActions::Get { org_id, handle_id } => {
+                            commands::google_chat::handles_get(&cfg, &org_id, &handle_id).await?;
+                        }
+                        GoogleChatHandleActions::Create { org_id, file } => {
+                            commands::google_chat::handles_create(&cfg, &org_id, &file).await?;
+                        }
+                        GoogleChatHandleActions::Update {
+                            org_id,
+                            handle_id,
+                            file,
+                        } => {
+                            commands::google_chat::handles_update(&cfg, &org_id, &handle_id, &file)
+                                .await?;
+                        }
+                        GoogleChatHandleActions::Delete { org_id, handle_id } => {
+                            commands::google_chat::handles_delete(&cfg, &org_id, &handle_id)
+                                .await?;
+                        }
+                    },
+                    GoogleChatActions::SpaceGet {
+                        domain_name,
+                        space_display_name,
+                    } => {
+                        commands::google_chat::space_get(&cfg, &domain_name, &space_display_name)
+                            .await?;
+                    }
+                },
+                IntegrationActions::Aws { action } => match action {
+                    IntegrationAwsActions::CloudAuth { action } => match action {
+                        CloudAuthActions::PersonaMappings { action } => match action {
+                            CloudAuthPersonaMappingActions::List => {
+                                commands::cloud_auth::persona_mappings_list(&cfg).await?;
+                            }
+                            CloudAuthPersonaMappingActions::Get { mapping_id } => {
+                                commands::cloud_auth::persona_mappings_get(&cfg, &mapping_id)
+                                    .await?;
+                            }
+                            CloudAuthPersonaMappingActions::Create { file } => {
+                                commands::cloud_auth::persona_mappings_create(&cfg, &file).await?;
+                            }
+                            CloudAuthPersonaMappingActions::Delete { mapping_id } => {
+                                commands::cloud_auth::persona_mappings_delete(&cfg, &mapping_id)
+                                    .await?;
+                            }
+                        },
+                    },
                 },
             }
         }
@@ -6348,19 +6836,53 @@ async fn main_inner() -> anyhow::Result<()> {
         }
         // --- Network (placeholder) ---
         Commands::Network { action } => match action {
-            NetworkActions::List => commands::network::list()?,
+            NetworkActions::List => {
+                anyhow::bail!("network commands are not yet implemented (API endpoints pending)")
+            }
             NetworkActions::Flows { action } => match action {
                 NetworkFlowActions::List => {
                     cfg.validate_auth()?;
                     commands::network::flows_list(&cfg).await?;
                 }
             },
-            NetworkActions::Devices { action } => match action {
-                NetworkDeviceActions::List => {
-                    cfg.validate_auth()?;
-                    commands::network::devices_list(&cfg).await?;
+            NetworkActions::Devices { action } => {
+                cfg.validate_auth()?;
+                match action {
+                    NetworkDeviceActions::List => {
+                        commands::network::devices_list(&cfg).await?;
+                    }
+                    NetworkDeviceActions::Get { device_id } => {
+                        commands::network::devices_get(&cfg, &device_id).await?;
+                    }
+                    NetworkDeviceActions::Interfaces {
+                        device_id,
+                        ip_addresses,
+                    } => {
+                        commands::network::devices_interfaces(&cfg, &device_id, ip_addresses)
+                            .await?;
+                    }
+                    NetworkDeviceActions::Tags { action } => match action {
+                        NetworkDeviceTagActions::List { device_id } => {
+                            commands::network::devices_tags_list(&cfg, &device_id).await?;
+                        }
+                        NetworkDeviceTagActions::Update { device_id, file } => {
+                            commands::network::devices_tags_update(&cfg, &device_id, &file).await?;
+                        }
+                    },
                 }
-            },
+            }
+            NetworkActions::Interfaces { action } => {
+                cfg.validate_auth()?;
+                match action {
+                    NetworkInterfaceTagActions::List { interface_id } => {
+                        commands::network::interfaces_tags_list(&cfg, &interface_id).await?;
+                    }
+                    NetworkInterfaceTagActions::Update { interface_id, file } => {
+                        commands::network::interfaces_tags_update(&cfg, &interface_id, &file)
+                            .await?;
+                    }
+                }
+            }
         },
         // --- Obs Pipelines (placeholder) ---
         Commands::ObsPipelines { action } => match action {
@@ -6441,6 +6963,14 @@ async fn main_inner() -> anyhow::Result<()> {
                         commands::product_analytics::events_send(&cfg, &f).await?;
                     }
                 },
+                ProductAnalyticsActions::Query { action } => match action {
+                    ProductAnalyticsQueryActions::Scalar { file } => {
+                        commands::product_analytics::query_scalar(&cfg, &file).await?;
+                    }
+                    ProductAnalyticsQueryActions::Timeseries { file } => {
+                        commands::product_analytics::query_timeseries(&cfg, &file).await?;
+                    }
+                },
             }
         }
         // --- Static Analysis ---
@@ -6486,6 +7016,7 @@ async fn main_inner() -> anyhow::Result<()> {
             AuthActions::Login => commands::auth::login(&cfg).await?,
             AuthActions::Logout => commands::auth::logout(&cfg).await?,
             AuthActions::Status => commands::auth::status(&cfg)?,
+            #[cfg(debug_assertions)]
             AuthActions::Token => commands::auth::token(&cfg)?,
             AuthActions::Refresh => commands::auth::refresh(&cfg).await?,
             AuthActions::List => commands::auth::list(&cfg)?,
