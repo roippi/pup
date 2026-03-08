@@ -180,7 +180,30 @@ pub async fn tests_run(
     if let Some((_, tunnel)) = active_tunnel {
         tunnel.stop();
     }
-    formatter::output(cfg, &final_result)
+    let results = &final_result["data"]["results"];
+    if cfg.output_format == crate::config::OutputFormat::Table {
+        let table_rows: Vec<serde_json::Value> = results
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .map(|r| {
+                        serde_json::json!({
+                            "status": r["status"],
+                            "test_name": r["test_name"],
+                            "test_public_id": r["test_public_id"],
+                            "location": r["location"],
+                            "duration_ms": r["duration"],
+                            "test_type": r["test_type"],
+                            "execution_rule": r["execution_rule"],
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        formatter::output(cfg, &table_rows)
+    } else {
+        formatter::output(cfg, results)
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
