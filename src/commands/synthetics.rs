@@ -50,13 +50,14 @@ fn build_auth_headers(cfg: &Config) -> anyhow::Result<reqwest::header::HeaderMap
     Ok(headers)
 }
 
+const POLL_INTERVAL_SECS: u64 = 5;
+
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn tests_run(
     cfg: &Config,
     public_ids: Vec<String>,
     use_tunnel: bool,
     timeout_secs: u64,
-    poll_interval_secs: u64,
 ) -> Result<()> {
     if public_ids.is_empty() {
         anyhow::bail!("at least one public ID is required");
@@ -146,7 +147,7 @@ pub async fn tests_run(
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
 
     let final_result = loop {
-        tokio::time::sleep(std::time::Duration::from_secs(poll_interval_secs)).await;
+        tokio::time::sleep(std::time::Duration::from_secs(POLL_INTERVAL_SECS)).await;
 
         let batch_resp = client
             .get(&poll_url)

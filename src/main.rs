@@ -2319,9 +2319,6 @@ enum SyntheticsTestActions {
         /// Maximum seconds to wait for results
         #[arg(long, default_value_t = 1800)]
         timeout: u64,
-        /// Seconds between result polls
-        #[arg(long, default_value_t = 5)]
-        poll_interval: u64,
     },
 }
 
@@ -5631,16 +5628,8 @@ async fn main_inner() -> anyhow::Result<()> {
                         public_ids,
                         tunnel,
                         timeout,
-                        poll_interval,
                     } => {
-                        commands::synthetics::tests_run(
-                            &cfg,
-                            public_ids,
-                            tunnel,
-                            timeout,
-                            poll_interval,
-                        )
-                        .await?;
+                        commands::synthetics::tests_run(&cfg, public_ids, tunnel, timeout).await?;
                     }
                 },
                 SyntheticsActions::Locations { action } => match action {
