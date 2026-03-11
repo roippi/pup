@@ -10,41 +10,57 @@
 
 use serde_json::Value;
 
-// Compress: keep real values, just strip the fat.
-const STRING_TRUNC: usize = 200;
-const ARRAY_ITEMS_TOP: usize = 20; // top-level list response
-const ARRAY_ITEMS_NESTED: usize = 10; // nested arrays (e.g. tags)
+/// Tunable parameters for JSON compression.
+#[derive(Debug, Clone)]
+pub struct CompressConfig {
+    /// Truncate strings longer than this many bytes (default: 200).
+    pub string_trunc: usize,
+    /// Max items to show from a top-level array, e.g. a list response (default: 20).
+    pub array_items_top: usize,
+    /// Max items to show from nested arrays, e.g. tags (default: 10).
+    pub array_items_nested: usize,
+}
+
+impl Default for CompressConfig {
+    fn default() -> Self {
+        Self {
+            string_trunc: 200,
+            array_items_top: 20,
+            array_items_nested: 10,
+        }
+    }
+}
 
 /// Compress a JSON string: strip nulls, truncate long strings, sample large arrays.
 /// Returns compact (non-pretty) JSON so the caller controls formatting.
-pub fn compress_json_string(json_str: &str) -> anyhow::Result<String> {
+pub fn compress_json_string(json_str: &str, cfg: &CompressConfig) -> anyhow::Result<String> {
     let value: Value = serde_json::from_str(json_str)?;
-    let compressed = compress_value(&value, 0);
+    let compressed = compress_value(&value, 0, cfg);
     Ok(serde_json::to_string(&compressed)?)
 }
 
-fn compress_value(value: &Value, depth: u8) -> Value {
+fn compress_value(value: &Value, depth: u8, cfg: &CompressConfig) -> Value {
     match value {
         Value::Null => Value::Null,
         Value::Bool(b) => Value::Bool(*b),
         Value::Number(n) => Value::Number(n.clone()),
         Value::String(s) => {
-            if s.len() > STRING_TRUNC {
-                Value::String(format!("{}...[{} chars]", &s[..STRING_TRUNC], s.len()))
+            if s.len() > cfg.string_trunc {
+                Value::String(format!("{}...[{} chars]", &s[..cfg.string_trunc], s.len()))
             } else {
                 Value::String(s.clone())
             }
         }
         Value::Array(arr) => {
             let limit = if depth == 0 {
-                ARRAY_ITEMS_TOP
+                cfg.array_items_top
             } else {
-                ARRAY_ITEMS_NESTED
+                cfg.array_items_nested
             };
             let mut items: Vec<Value> = arr
                 .iter()
                 .take(limit)
-                .map(|v| compress_value(v, depth + 1))
+                .map(|v| compress_value(v, depth + 1, cfg))
                 .filter(|v| !v.is_null())
                 .collect();
             if arr.len() > limit {
@@ -58,7 +74,7 @@ fn compress_value(value: &Value, depth: u8) -> Value {
                 if v.is_null() {
                     continue;
                 }
-                let c = compress_value(v, depth + 1);
+                let c = compress_value(v, depth + 1, cfg);
                 if !c.is_null() {
                     out.insert(k.clone(), c);
                 }
@@ -169,7 +185,7 @@ mod tests {
     #[test]
     fn test_compress_drops_nulls() {
         let obj = serde_json::json!({"id": 1, "deleted": null, "name": "foo"});
-        let c = compress_value(&obj, 0);
+        let c = compress_value(&obj, 0, &CompressConfig::default());
         let m = c.as_object().unwrap();
         assert!(m.contains_key("id"));
         assert!(m.contains_key("name"));
@@ -179,7 +195,7 @@ mod tests {
     #[test]
     fn test_compress_truncates_long_string() {
         let long = "x".repeat(300);
-        let c = compress_value(&Value::String(long), 0);
+        let c = compress_value(&Value::String(long), 0, &CompressConfig::default());
         let s = c.as_str().unwrap();
         assert!(s.contains("...[300 chars]"));
         assert!(s.len() < 300);
@@ -187,14 +203,14 @@ mod tests {
 
     #[test]
     fn test_compress_keeps_short_string() {
-        let c = compress_value(&serde_json::json!("hello"), 0);
+        let c = compress_value(&serde_json::json!("hello"), 0, &CompressConfig::default());
         assert_eq!(c.as_str().unwrap(), "hello");
     }
 
     #[test]
     fn test_compress_array_top_level_sampled() {
         let arr: Vec<Value> = (0..30).map(|i| serde_json::json!(i)).collect();
-        let c = compress_value(&Value::Array(arr), 0);
+        let c = compress_value(&Value::Array(arr), 0, &CompressConfig::default());
         let items = c.as_array().unwrap();
         // 20 real items + 1 "+10 more" sentinel
         assert_eq!(items.len(), 21);
@@ -204,7 +220,7 @@ mod tests {
     #[test]
     fn test_compress_array_nested_sampled() {
         let arr: Vec<Value> = (0..15).map(|i| serde_json::json!(i)).collect();
-        let c = compress_value(&Value::Array(arr), 1); // depth=1 → nested limit
+        let c = compress_value(&Value::Array(arr), 1, &CompressConfig::default()); // depth=1 → nested limit
         let items = c.as_array().unwrap();
         assert_eq!(items.len(), 11); // 10 + sentinel
     }
@@ -212,7 +228,7 @@ mod tests {
     #[test]
     fn test_compress_array_within_limit() {
         let arr = serde_json::json!(["env:prod", "team:api"]);
-        let c = compress_value(&arr, 1);
+        let c = compress_value(&arr, 1, &CompressConfig::default());
         assert_eq!(c.as_array().unwrap().len(), 2);
     }
 
@@ -224,7 +240,7 @@ mod tests {
             "status": "Alert",
             "tags": ["env:prod", "team:api"],
         });
-        let c = compress_value(&obj, 0);
+        let c = compress_value(&obj, 0, &CompressConfig::default());
         let m = c.as_object().unwrap();
         assert_eq!(m["id"], serde_json::json!(123));
         assert_eq!(m["name"].as_str().unwrap(), "High CPU");
@@ -236,13 +252,35 @@ mod tests {
     fn test_compress_smaller_than_original() {
         // Lots of null fields + a long message → should compress well
         let json = r#"[{"id":1,"name":"High CPU","message":"CPU above 90% on host for 5 minutes. Check runaway processes or traffic spikes immediately. Alert will resolve when CPU drops below threshold for 3 consecutive minutes.","tags":["env:prod","team:api"],"status":"Alert","deleted":null,"draft":null,"restricted_roles":null,"creator":null,"priority":null,"org_id":null}]"#;
-        let compressed = compress_json_string(json).unwrap();
+        let compressed = compress_json_string(json, &CompressConfig::default()).unwrap();
         assert!(
             compressed.len() < json.len(),
             "compressed ({}) should be smaller than original ({})",
             compressed.len(),
             json.len()
         );
+    }
+
+    #[test]
+    fn test_compress_config_custom_values() {
+        let cfg = CompressConfig {
+            string_trunc: 10,
+            array_items_top: 2,
+            array_items_nested: 1,
+        };
+        // String truncation at 10 chars
+        let c = compress_value(&Value::String("hello world!".into()), 0, &cfg);
+        assert_eq!(c.as_str().unwrap(), "hello worl...[12 chars]");
+
+        // Top-level array capped at 2
+        let arr: Vec<Value> = (0..5).map(|i| serde_json::json!(i)).collect();
+        let c = compress_value(&Value::Array(arr), 0, &cfg);
+        assert_eq!(c.as_array().unwrap().len(), 3); // 2 items + sentinel
+
+        // Nested array capped at 1
+        let arr: Vec<Value> = (0..5).map(|i| serde_json::json!(i)).collect();
+        let c = compress_value(&Value::Array(arr), 1, &cfg);
+        assert_eq!(c.as_array().unwrap().len(), 2); // 1 item + sentinel
     }
 
     // --- extract_schema tests (RTK port) ---

@@ -34,6 +34,9 @@ fn test_config(mock_url: &str) -> Config {
         auto_approve: false,
         agent_mode: false,
         compact_mode: false,
+        compact_string_trunc: 200,
+        compact_array_top: 20,
+        compact_array_nested: 10,
         read_only: false,
     }
 }
@@ -396,6 +399,9 @@ async fn test_logs_search_with_oauth() {
         auto_approve: false,
         agent_mode: false,
         compact_mode: false,
+        compact_string_trunc: 200,
+        compact_array_top: 20,
+        compact_array_nested: 10,
         read_only: false,
     };
 
@@ -719,6 +725,9 @@ async fn test_events_search_requires_api_keys() {
         auto_approve: false,
         agent_mode: false,
         compact_mode: false,
+        compact_string_trunc: 200,
+        compact_array_top: 20,
+        compact_array_nested: 10,
         read_only: false,
     };
 
@@ -750,6 +759,9 @@ async fn test_api_get() {
         auto_approve: false,
         agent_mode: false,
         compact_mode: false,
+        compact_string_trunc: 200,
+        compact_array_top: 20,
+        compact_array_nested: 10,
         read_only: false,
     };
 
@@ -785,6 +797,9 @@ async fn test_api_get_with_query() {
         auto_approve: false,
         agent_mode: false,
         compact_mode: false,
+        compact_string_trunc: 200,
+        compact_array_top: 20,
+        compact_array_nested: 10,
         read_only: false,
     };
 
@@ -824,6 +839,9 @@ async fn test_api_post() {
         auto_approve: false,
         agent_mode: false,
         compact_mode: false,
+        compact_string_trunc: 200,
+        compact_array_top: 20,
+        compact_array_nested: 10,
         read_only: false,
     };
 
@@ -858,6 +876,9 @@ async fn test_api_put() {
         auto_approve: false,
         agent_mode: false,
         compact_mode: false,
+        compact_string_trunc: 200,
+        compact_array_top: 20,
+        compact_array_nested: 10,
         read_only: false,
     };
 
@@ -892,6 +913,9 @@ async fn test_api_patch() {
         auto_approve: false,
         agent_mode: false,
         compact_mode: false,
+        compact_string_trunc: 200,
+        compact_array_top: 20,
+        compact_array_nested: 10,
         read_only: false,
     };
 
@@ -926,6 +950,9 @@ async fn test_api_delete() {
         auto_approve: false,
         agent_mode: false,
         compact_mode: false,
+        compact_string_trunc: 200,
+        compact_array_top: 20,
+        compact_array_nested: 10,
         read_only: false,
     };
 
@@ -959,6 +986,9 @@ async fn test_api_error_response() {
         auto_approve: false,
         agent_mode: false,
         compact_mode: false,
+        compact_string_trunc: 200,
+        compact_array_top: 20,
+        compact_array_nested: 10,
         read_only: false,
     };
 
@@ -993,6 +1023,9 @@ async fn test_api_bearer_auth() {
         auto_approve: false,
         agent_mode: false,
         compact_mode: false,
+        compact_string_trunc: 200,
+        compact_array_top: 20,
+        compact_array_nested: 10,
         read_only: false,
     };
 
@@ -1025,6 +1058,9 @@ async fn test_api_no_auth() {
         auto_approve: false,
         agent_mode: false,
         compact_mode: false,
+        compact_string_trunc: 200,
+        compact_array_top: 20,
+        compact_array_nested: 10,
         read_only: false,
     };
 
@@ -1053,6 +1089,9 @@ async fn test_api_empty_response() {
         auto_approve: false,
         agent_mode: false,
         compact_mode: false,
+        compact_string_trunc: 200,
+        compact_array_top: 20,
+        compact_array_nested: 10,
         read_only: false,
     };
 
@@ -1087,6 +1126,9 @@ async fn test_api_server_error() {
         auto_approve: false,
         agent_mode: false,
         compact_mode: false,
+        compact_string_trunc: 200,
+        compact_array_top: 20,
+        compact_array_nested: 10,
         read_only: false,
     };
 

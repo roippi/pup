@@ -461,6 +461,9 @@ mod tests {
             auto_approve: false,
             agent_mode: false,
             compact_mode: false,
+            compact_string_trunc: 200,
+            compact_array_top: 20,
+            compact_array_nested: 10,
             read_only: false,
         }
     }

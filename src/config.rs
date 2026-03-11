@@ -16,6 +16,9 @@ pub struct Config {
     pub auto_approve: bool,
     pub agent_mode: bool,
     pub compact_mode: bool,
+    pub compact_string_trunc: usize,
+    pub compact_array_top: usize,
+    pub compact_array_nested: usize,
     pub read_only: bool,
 }
 
@@ -71,6 +74,14 @@ struct FileConfig {
     output: Option<String>,
     auto_approve: Option<bool>,
     read_only: Option<bool>,
+    /// Enable compact agent mode output (strip nulls, truncate strings, sample arrays).
+    compact_mode: Option<bool>,
+    /// Max string length before truncation in compact mode (default: 200).
+    compact_string_trunc: Option<usize>,
+    /// Max items shown from a top-level array in compact mode (default: 20).
+    compact_array_top: Option<usize>,
+    /// Max items shown from nested arrays in compact mode (default: 10).
+    compact_array_nested: Option<usize>,
     /// Default OAuth scopes to request on login (comma-separated).
     scopes: Option<String>,
     /// Per-org profile settings. Profile key matches the --org value used at login.
@@ -105,7 +116,16 @@ impl Config {
                 || env_bool("DD_CLI_AUTO_APPROVE")
                 || file_cfg.auto_approve.unwrap_or(false),
             agent_mode: false, // set by caller from --agent flag or useragent detection
-            compact_mode: env_bool("AGENT_COMPACT_MODE"), // also set by --agent-compact flag
+            compact_mode: env_bool("AGENT_COMPACT_MODE") || file_cfg.compact_mode.unwrap_or(false), // also set by --agent-compact flag
+            compact_string_trunc: env_usize("AGENT_COMPACT_STRING_TRUNC")
+                .or(file_cfg.compact_string_trunc)
+                .unwrap_or(200),
+            compact_array_top: env_usize("AGENT_COMPACT_ARRAY_TOP")
+                .or(file_cfg.compact_array_top)
+                .unwrap_or(20),
+            compact_array_nested: env_usize("AGENT_COMPACT_ARRAY_NESTED")
+                .or(file_cfg.compact_array_nested)
+                .unwrap_or(10),
             read_only: env_bool("DD_READ_ONLY")
                 || env_bool("DD_CLI_READ_ONLY")
                 || file_cfg.read_only.unwrap_or(false),
@@ -133,6 +153,9 @@ impl Config {
             auto_approve: false,
             agent_mode: false,
             compact_mode: false,
+            compact_string_trunc: 200,
+            compact_array_top: 20,
+            compact_array_nested: 10,
             read_only: false,
         }
     }
@@ -349,6 +372,14 @@ fn env_or(key: &str, fallback: Option<String>) -> Option<String> {
 }
 
 #[cfg(not(feature = "browser"))]
+fn env_usize(key: &str) -> Option<usize> {
+    std::env::var(key)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .and_then(|s| s.parse().ok())
+}
+
+#[cfg(not(feature = "browser"))]
 fn env_bool(key: &str) -> bool {
     matches!(
         std::env::var(key)
@@ -375,6 +406,9 @@ mod tests {
             auto_approve: false,
             agent_mode: false,
             compact_mode: false,
+            compact_string_trunc: 200,
+            compact_array_top: 20,
+            compact_array_nested: 10,
             read_only: false,
         }
     }

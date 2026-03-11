@@ -220,7 +220,7 @@ pub async fn search(
         &resp,
         &cfg.output_format,
         cfg.agent_mode,
-        cfg.compact_mode,
+        crate::formatter::compress_cfg_from(cfg).as_ref(),
         meta.as_ref(),
     )?;
     Ok(())
