@@ -152,7 +152,10 @@ pub static DASHBOARD_WEIGHTS: FieldWeights = FieldWeights {
     default_weight: 0.20,
 };
 
-/// Metric weights — applied to the output of `flatten_metric` (summary structure).
+/// Metric weights — not wired into routing; `flatten_metric` already produces compact
+/// output (overall_stats + bins + url). Field selection at 150 tokens would silently
+/// drop the series object since it exceeds the budget even at importance 1.0.
+#[allow(dead_code)]
 pub static METRIC_WEIGHTS: FieldWeights = FieldWeights {
     weights: &[
         ("query", 1.0),
@@ -228,7 +231,9 @@ pub fn weights_for_command(command: &str) -> Option<&'static FieldWeights> {
         "incidents list" | "incidents get" => Some(&INCIDENT_WEIGHTS),
         "events search" | "events list" => Some(&EVENT_WEIGHTS),
         "dashboards list" => Some(&DASHBOARD_WEIGHTS),
-        "metrics query" => Some(&METRIC_WEIGHTS),
+        // flatten_metric already produces compact output (overall_stats + bins + url);
+        // field_weights at 150 tokens would drop the series object since it exceeds budget.
+        "metrics query" => None,
         _ => None,
     }
 }
@@ -816,7 +821,7 @@ mod tests {
         assert!(weights_for_command("incidents list").is_some());
         assert!(weights_for_command("events search").is_some());
         assert!(weights_for_command("dashboards list").is_some());
-        assert!(weights_for_command("metrics query").is_some());
+        assert!(weights_for_command("metrics query").is_none()); // flatten_metric handles compression
     }
 
     #[test]
