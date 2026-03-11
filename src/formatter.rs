@@ -54,8 +54,11 @@ fn go_html_escape(json: &str) -> String {
 
 /// Format and print data to stdout.
 ///
-/// `compress_cfg` — when `Some`, agent mode output is compressed using those settings;
-/// when `None`, the full data is returned in the agent envelope unchanged.
+/// `compress_cfg` — when `Some`, agent mode output is compressed using those settings
+/// (flatten + token-budget field selection) across ALL output formats, not just JSON.
+/// For JSON, the compressed data is wrapped in the `{status, data, metadata}` envelope.
+/// For YAML/CSV/table, the compressed data is serialized directly (no envelope).
+/// When `None`, the full data is output with no compression.
 pub fn format_and_print<T: Serialize>(
     data: &T,
     format: &OutputFormat,
@@ -63,7 +66,7 @@ pub fn format_and_print<T: Serialize>(
     compress_cfg: Option<&rtk::CompressConfig>,
     meta: Option<&Metadata>,
 ) -> Result<()> {
-    if agent_mode && *format == OutputFormat::Json {
+    if agent_mode {
         let sorted_data = sort_json_value(serde_json::to_value(data)?);
         // Hoist: when the API wraps its list/object in a nested "data" key,
         // use that inner value directly so agents see .data[*] instead of .data.data[*].
@@ -72,29 +75,37 @@ pub fn format_and_print<T: Serialize>(
             _ => sorted_data.clone(),
         };
 
-        let output_data: serde_json::Value;
-        if let Some(cfg) = compress_cfg {
-            // Compress: strip nulls, truncate long strings, sample large arrays.
-            // Falls back to full data when compressed form would be larger (tiny payloads).
+        // Apply flatten + token-budget compression when enabled. Falls back to full
+        // data when the compressed form would be larger (tiny payloads).
+        let output_data: serde_json::Value = if let Some(cfg) = compress_cfg {
             let full_json = serde_json::to_string(&effective_data)?;
             let compressed_json = rtk::compress_json_string(&full_json, cfg)?;
             if compressed_json.len() < full_json.len() {
-                output_data = serde_json::from_str(&compressed_json)?;
+                serde_json::from_str(&compressed_json)?
             } else {
-                output_data = effective_data;
+                effective_data
             }
         } else {
-            output_data = effective_data;
-        }
-
-        let envelope = AgentEnvelope {
-            status: "success",
-            data: &output_data,
-            metadata: meta,
+            effective_data
         };
-        let json = go_html_escape(&serde_json::to_string_pretty(&envelope)?);
-        println!("{json}");
-        return Ok(());
+
+        // Dispatch to the requested format. JSON gets the status/metadata envelope;
+        // other formats serialize the compressed data directly.
+        return match format {
+            OutputFormat::Json => {
+                let envelope = AgentEnvelope {
+                    status: "success",
+                    data: &output_data,
+                    metadata: meta,
+                };
+                let json = go_html_escape(&serde_json::to_string_pretty(&envelope)?);
+                println!("{json}");
+                Ok(())
+            }
+            OutputFormat::Yaml => print_yaml(&output_data),
+            OutputFormat::Table => print_table(&output_data),
+            OutputFormat::Csv => print_csv(&output_data),
+        };
     }
 
     match format {
