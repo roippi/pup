@@ -5,6 +5,7 @@ mod client;
 mod commands;
 mod config;
 mod formatter;
+mod rtk;
 mod skills;
 #[cfg(not(target_arch = "wasm32"))]
 mod tunnel;
@@ -37,6 +38,9 @@ pub(crate) struct Cli {
     /// Enable agent mode
     #[arg(long, global = true)]
     agent: bool,
+    /// Compress agent mode output (strip nulls, truncate long strings, sample large arrays)
+    #[arg(long = "agent-compact", global = true)]
+    agent_compact: bool,
     /// Block all write operations (create, update, delete)
     #[arg(long, global = true)]
     read_only: bool,
@@ -5515,6 +5519,9 @@ async fn main_inner() -> anyhow::Result<()> {
     cfg.agent_mode = cli.agent || useragent::is_agent_mode();
     if cfg.agent_mode {
         cfg.auto_approve = true;
+    }
+    if cli.agent_compact {
+        cfg.compact_mode = true;
     }
     // Apply --org flag (higher priority than DD_ORG env var / config file)
     if let Some(org) = cli.org {

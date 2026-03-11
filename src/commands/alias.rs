@@ -45,7 +45,7 @@ pub fn list(cfg: &crate::config::Config) -> Result<()> {
                 .iter()
                 .map(|(name, command)| serde_json::json!({"name": name, "command": command}))
                 .collect();
-            crate::formatter::format_and_print(&items, &cfg.output_format, cfg.agent_mode, None)?;
+            crate::formatter::format_and_print(&items, &cfg.output_format, cfg.agent_mode, cfg.compact_mode, None)?;
         }
     }
     Ok(())

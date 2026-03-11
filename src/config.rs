@@ -15,6 +15,7 @@ pub struct Config {
     pub output_format: OutputFormat,
     pub auto_approve: bool,
     pub agent_mode: bool,
+    pub compact_mode: bool,
     pub read_only: bool,
 }
 
@@ -104,6 +105,7 @@ impl Config {
                 || env_bool("DD_CLI_AUTO_APPROVE")
                 || file_cfg.auto_approve.unwrap_or(false),
             agent_mode: false, // set by caller from --agent flag or useragent detection
+            compact_mode: env_bool("AGENT_COMPACT_MODE"), // also set by --agent-compact flag
             read_only: env_bool("DD_READ_ONLY")
                 || env_bool("DD_CLI_READ_ONLY")
                 || file_cfg.read_only.unwrap_or(false),
@@ -130,6 +132,7 @@ impl Config {
             output_format: OutputFormat::Json,
             auto_approve: false,
             agent_mode: false,
+            compact_mode: false,
             read_only: false,
         }
     }
@@ -371,6 +374,7 @@ mod tests {
             output_format: OutputFormat::Json,
             auto_approve: false,
             agent_mode: false,
+            compact_mode: false,
             read_only: false,
         }
     }

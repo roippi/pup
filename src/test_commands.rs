@@ -33,6 +33,7 @@ fn test_config(mock_url: &str) -> Config {
         output_format: OutputFormat::Json,
         auto_approve: false,
         agent_mode: false,
+            compact_mode: false,
         read_only: false,
     }
 }
@@ -394,6 +395,7 @@ async fn test_logs_search_with_oauth() {
         output_format: OutputFormat::Json,
         auto_approve: false,
         agent_mode: false,
+            compact_mode: false,
         read_only: false,
     };
 
@@ -716,6 +718,7 @@ async fn test_events_search_requires_api_keys() {
         output_format: OutputFormat::Json,
         auto_approve: false,
         agent_mode: false,
+            compact_mode: false,
         read_only: false,
     };
 
@@ -746,6 +749,7 @@ async fn test_api_get() {
         output_format: OutputFormat::Json,
         auto_approve: false,
         agent_mode: false,
+            compact_mode: false,
         read_only: false,
     };
 
@@ -780,6 +784,7 @@ async fn test_api_get_with_query() {
         output_format: OutputFormat::Json,
         auto_approve: false,
         agent_mode: false,
+            compact_mode: false,
         read_only: false,
     };
 
@@ -818,6 +823,7 @@ async fn test_api_post() {
         output_format: OutputFormat::Json,
         auto_approve: false,
         agent_mode: false,
+            compact_mode: false,
         read_only: false,
     };
 
@@ -851,6 +857,7 @@ async fn test_api_put() {
         output_format: OutputFormat::Json,
         auto_approve: false,
         agent_mode: false,
+            compact_mode: false,
         read_only: false,
     };
 
@@ -884,6 +891,7 @@ async fn test_api_patch() {
         output_format: OutputFormat::Json,
         auto_approve: false,
         agent_mode: false,
+            compact_mode: false,
         read_only: false,
     };
 
@@ -917,6 +925,7 @@ async fn test_api_delete() {
         output_format: OutputFormat::Json,
         auto_approve: false,
         agent_mode: false,
+            compact_mode: false,
         read_only: false,
     };
 
@@ -949,6 +958,7 @@ async fn test_api_error_response() {
         output_format: OutputFormat::Json,
         auto_approve: false,
         agent_mode: false,
+            compact_mode: false,
         read_only: false,
     };
 
@@ -982,6 +992,7 @@ async fn test_api_bearer_auth() {
         output_format: OutputFormat::Json,
         auto_approve: false,
         agent_mode: false,
+            compact_mode: false,
         read_only: false,
     };
 
@@ -1013,6 +1024,7 @@ async fn test_api_no_auth() {
         output_format: OutputFormat::Json,
         auto_approve: false,
         agent_mode: false,
+            compact_mode: false,
         read_only: false,
     };
 
@@ -1040,6 +1052,7 @@ async fn test_api_empty_response() {
         output_format: OutputFormat::Json,
         auto_approve: false,
         agent_mode: false,
+            compact_mode: false,
         read_only: false,
     };
 
@@ -1073,6 +1086,7 @@ async fn test_api_server_error() {
         output_format: OutputFormat::Json,
         auto_approve: false,
         agent_mode: false,
+            compact_mode: false,
         read_only: false,
     };
 
