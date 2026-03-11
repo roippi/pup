@@ -22,7 +22,13 @@ pub fn list(cfg: &crate::config::Config, entry_type: Option<String>) -> Result<(
         })
         .collect();
 
-    crate::formatter::format_and_print(&items, &cfg.output_format, cfg.agent_mode, cfg.compact_mode, None)?;
+    crate::formatter::format_and_print(
+        &items,
+        &cfg.output_format,
+        cfg.agent_mode,
+        cfg.compact_mode,
+        None,
+    )?;
     Ok(())
 }
 
@@ -74,7 +80,13 @@ pub fn install(
             "installed": installed,
             "directories": directories,
         });
-        crate::formatter::format_and_print(&result, &cfg.output_format, cfg.agent_mode, cfg.compact_mode, None)?;
+        crate::formatter::format_and_print(
+            &result,
+            &cfg.output_format,
+            cfg.agent_mode,
+            cfg.compact_mode,
+            None,
+        )?;
     } else {
         for d in &dirs_used {
             println!("  {d}");

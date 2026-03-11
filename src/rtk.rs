@@ -150,11 +150,7 @@ fn extract_schema(value: &Value, depth: usize, max_depth: usize) -> String {
                 }
 
                 if i >= 15 {
-                    lines.push(format!(
-                        "{}  ... +{} more keys",
-                        indent,
-                        keys.len() - i - 1
-                    ));
+                    lines.push(format!("{}  ... +{} more keys", indent, keys.len() - i - 1));
                     break;
                 }
             }
@@ -267,10 +263,7 @@ mod tests {
     #[test]
     fn test_extract_schema_string_long() {
         let long = "a".repeat(60);
-        assert_eq!(
-            extract_schema(&serde_json::json!(long), 0, 5),
-            "string[60]"
-        );
+        assert_eq!(extract_schema(&serde_json::json!(long), 0, 5), "string[60]");
     }
 
     #[test]

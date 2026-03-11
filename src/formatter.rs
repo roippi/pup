@@ -26,7 +26,6 @@ struct AgentEnvelope<'a, T: Serialize> {
     metadata: Option<&'a Metadata>,
 }
 
-
 /// Recursively sort all JSON object keys alphabetically.
 fn sort_json_value(v: serde_json::Value) -> serde_json::Value {
     match v {
@@ -105,7 +104,13 @@ pub fn format_and_print<T: Serialize>(
 
 /// Convenience: format and print using config settings (respects -o flag and agent mode).
 pub fn output<T: Serialize>(cfg: &crate::config::Config, data: &T) -> Result<()> {
-    format_and_print(data, &cfg.output_format, cfg.agent_mode, cfg.compact_mode, None)
+    format_and_print(
+        data,
+        &cfg.output_format,
+        cfg.agent_mode,
+        cfg.compact_mode,
+        None,
+    )
 }
 
 pub fn print_json<T: Serialize>(data: &T) -> Result<()> {
