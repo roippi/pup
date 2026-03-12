@@ -116,6 +116,7 @@ pub static INCIDENT_WEIGHTS: FieldWeights = FieldWeights {
         ("title", 1.0),
         ("severity", 1.0),
         ("state", 1.0),
+        ("url", 1.0),
         ("created", 0.90),
         ("commander", 0.80),
         ("customer_impacted", 0.70),
@@ -371,6 +372,13 @@ pub fn flatten_incident(v: &Value) -> Value {
                 out.insert("commander".into(), n.clone());
             }
         }
+    }
+    // Construct a direct URL from the incident ID.
+    if let Some(id_str) = out.get("id").and_then(|v| v.as_str()) {
+        out.insert(
+            "url".into(),
+            Value::String(format!("https://app.datadoghq.com/incidents/{id_str}")),
+        );
     }
     Value::Object(out)
 }
