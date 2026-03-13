@@ -718,6 +718,26 @@ enum Commands {
         #[command(subcommand)]
         action: DashboardActions,
     },
+    /// Query Datadog data using DDSQL (Datadog SQL)
+    ///
+    /// DDSQL lets you query metrics, logs, and reference tables using SQL syntax.
+    ///
+    /// COMMANDS:
+    ///   table        Execute query and return table data (supports -o json/yaml/table/csv)
+    ///   time-series  Execute query and return time series data
+    ///
+    /// EXAMPLES:
+    ///   pup ddsql table --query "SELECT * FROM reference_tables.offices_ips LIMIT 5"
+    ///   pup ddsql table --query "SELECT * FROM reference_tables.offices_ips" -o csv > results.csv
+    ///   pup ddsql time-series --query "SELECT avg(system.cpu.user) FROM metrics GROUP BY host" --from 1h --interval 300000
+    ///
+    /// AUTHENTICATION:
+    ///   Requires OAuth2 (via 'pup auth login') or API key + Application key.
+    #[command(verbatim_doc_comment)]
+    Ddsql {
+        #[command(subcommand)]
+        action: DdsqlActions,
+    },
     /// Manage data governance
     ///
     /// Manage data governance, sensitive data scanning, and data deletion.
@@ -2505,6 +2525,42 @@ enum DowntimeActions {
     },
     /// Cancel a downtime
     Cancel { id: String },
+}
+
+// ---- DDSQL ----
+#[derive(Subcommand)]
+enum DdsqlActions {
+    /// Execute DDSQL query and return columnar table data
+    Table {
+        #[arg(long, help = "DDSQL query string")]
+        query: String,
+        #[arg(
+            long,
+            default_value = "1h",
+            help = "Start time (e.g., 1h, 30m, 7d, now, unix timestamp)"
+        )]
+        from: String,
+        #[arg(long, default_value = "now", help = "End time")]
+        to: String,
+        #[arg(long, help = "Aggregation interval in milliseconds (default: 60000)")]
+        interval: Option<i64>,
+        #[arg(long, default_value_t = 50, help = "Maximum number of rows to return")]
+        limit: i32,
+        #[arg(long, help = "Number of rows to skip (for pagination)")]
+        offset: Option<i32>,
+    },
+    /// Execute DDSQL query and return time series data
+    #[command(name = "time-series")]
+    TimeSeries {
+        #[arg(long, help = "DDSQL query string")]
+        query: String,
+        #[arg(long, default_value = "1h", help = "Start time")]
+        from: String,
+        #[arg(long, default_value = "now", help = "End time")]
+        to: String,
+        #[arg(long, help = "Aggregation interval in milliseconds (default: 60000)")]
+        interval: Option<i64>,
+    },
 }
 
 // ---- Tags ----
@@ -7205,6 +7261,31 @@ async fn main_inner() -> anyhow::Result<()> {
                     ..
                 } => {
                     commands::apm::flow_map(&cfg, query, limit, from, to).await?;
+                }
+            }
+        }
+        // --- DDSQL ---
+        Commands::Ddsql { action } => {
+            cfg.validate_auth()?;
+            match action {
+                DdsqlActions::Table {
+                    query,
+                    from,
+                    to,
+                    interval,
+                    limit,
+                    offset,
+                } => {
+                    commands::ddsql::table(&cfg, &query, &from, &to, interval, Some(limit), offset)
+                        .await?;
+                }
+                DdsqlActions::TimeSeries {
+                    query,
+                    from,
+                    to,
+                    interval,
+                } => {
+                    commands::ddsql::time_series(&cfg, &query, &from, &to, interval).await?;
                 }
             }
         }

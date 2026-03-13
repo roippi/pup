@@ -25,6 +25,7 @@ pup <domain> <subgroup> <action> [options] # Nested commands
 | traces | - | - | ❌ |
 | monitors | list, get, delete, search | src/commands/monitors.rs | ✅ |
 | dashboards | list, get, delete, url | src/commands/dashboards.rs | ✅ |
+| ddsql | table, time-series | src/commands/ddsql.rs | ✅ |
 | slos | list, get, delete, status | src/commands/slos.rs | ✅ |
 | incidents | list, get, attachments, settings, handles, postmortem-templates | src/commands/incidents.rs | ✅ |
 | rum | apps, metrics, retention-filters, sessions, playlists, heatmaps | src/commands/rum.rs | ✅ |
@@ -119,6 +120,7 @@ pup infrastructure hosts list
 - **traces** - APM traces (not yet implemented - use `apm` commands instead)
 - **rum** - Real User Monitoring (apps, metrics, retention-filters, sessions)
 - **events** - Infrastructure events (list, search, get)
+- **ddsql** - DDSQL queries (table, csv, time-series)
 
 ### Monitoring & Alerting
 - **monitors** - Monitor management (list, get, delete)
