@@ -616,6 +616,7 @@ enum Commands {
     ///   pup completions bash > /etc/bash_completion.d/pup
     ///   pup completions zsh > ~/.zfunc/_pup
     ///   pup completions fish > ~/.config/fish/completions/pup.fish
+    #[cfg(not(target_arch = "wasm32"))]
     #[command(verbatim_doc_comment)]
     Completions {
         /// Shell to generate completions for
@@ -7486,6 +7487,7 @@ async fn main_inner() -> anyhow::Result<()> {
             }
         }
         // --- Utility ---
+        #[cfg(not(target_arch = "wasm32"))]
         Commands::Completions { shell, install } => {
             if install {
                 commands::completions::install(shell)?;
