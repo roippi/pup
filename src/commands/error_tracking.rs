@@ -25,13 +25,6 @@ pub async fn issues_search(
     track: Option<String>,
     persona: Option<String>,
 ) -> Result<()> {
-    if track.is_some() && persona.is_some() {
-        anyhow::bail!("--track and --persona are mutually exclusive; specify one or the other");
-    }
-    if track.is_none() && persona.is_none() {
-        anyhow::bail!("either --track or --persona must be specified");
-    }
-
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
         Some(c) => ErrorTrackingAPI::with_client_and_config(dd_cfg, c),
@@ -44,7 +37,7 @@ pub async fn issues_search(
     let query_str = query.unwrap_or_else(|| "*".to_string());
     let mut attrs = IssuesSearchRequestDataAttributes::new(one_day_ago, query_str, now);
     if let Some(ref t) = track {
-        let track_value = match t.as_str() {
+        let track_value = match t.to_lowercase().as_str() {
             "trace" => IssuesSearchRequestDataAttributesTrack::TRACE,
             "logs" => IssuesSearchRequestDataAttributesTrack::LOGS,
             "rum" => IssuesSearchRequestDataAttributesTrack::RUM,
@@ -94,13 +87,6 @@ pub async fn issues_search(
     track: Option<String>,
     persona: Option<String>,
 ) -> Result<()> {
-    if track.is_some() && persona.is_some() {
-        anyhow::bail!("--track and --persona are mutually exclusive; specify one or the other");
-    }
-    if track.is_none() && persona.is_none() {
-        anyhow::bail!("either --track or --persona must be specified");
-    }
-
     let now = chrono::Utc::now().timestamp_millis();
     let one_day_ago = now - 86_400_000;
     let query_str = query.unwrap_or_else(|| "*".to_string());
@@ -110,9 +96,9 @@ pub async fn issues_search(
         "end": now,
     });
     if let Some(ref t) = track {
-        match t.as_str() {
+        match t.to_lowercase().as_str() {
             "trace" | "logs" | "rum" => {
-                attributes["track"] = serde_json::Value::String(t.clone());
+                attributes["track"] = serde_json::Value::String(t.to_lowercase());
             }
             other => anyhow::bail!(
                 "invalid track value '{}': must be trace, logs, or rum",

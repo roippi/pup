@@ -4031,9 +4031,19 @@ enum ErrorTrackingIssueActions {
             help = "Sort order: TOTAL_COUNT, FIRST_SEEN, IMPACTED_SESSIONS, PRIORITY"
         )]
         order_by: String,
-        #[arg(long, help = "Error source track: trace, logs, or rum")]
+        #[arg(
+            long,
+            conflicts_with = "persona",
+            required_unless_present = "persona",
+            help = "Error source track: trace, logs, or rum"
+        )]
         track: Option<String>,
-        #[arg(long, help = "Client persona filter: ALL, BROWSER, MOBILE, or BACKEND")]
+        #[arg(
+            long,
+            conflicts_with = "track",
+            required_unless_present = "track",
+            help = "Client persona filter: ALL, BROWSER, MOBILE, or BACKEND"
+        )]
         persona: Option<String>,
     },
     /// Get issue details
