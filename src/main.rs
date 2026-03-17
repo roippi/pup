@@ -4031,6 +4031,8 @@ enum ErrorTrackingIssueActions {
             help = "Sort order: TOTAL_COUNT, FIRST_SEEN, IMPACTED_SESSIONS, PRIORITY"
         )]
         order_by: String,
+        #[arg(long, help = "Error source track: trace, logs, or rum")]
+        track: Option<String>,
     },
     /// Get issue details
     Get { issue_id: String },
@@ -6883,8 +6885,13 @@ async fn main_inner() -> anyhow::Result<()> {
             cfg.validate_auth()?;
             match action {
                 ErrorTrackingActions::Issues { action } => match action {
-                    ErrorTrackingIssueActions::Search { query, limit, .. } => {
-                        commands::error_tracking::issues_search(&cfg, query, limit).await?;
+                    ErrorTrackingIssueActions::Search {
+                        query,
+                        limit,
+                        track,
+                        ..
+                    } => {
+                        commands::error_tracking::issues_search(&cfg, query, limit, track).await?;
                     }
                     ErrorTrackingIssueActions::Get { issue_id } => {
                         commands::error_tracking::issues_get(&cfg, &issue_id).await?;
