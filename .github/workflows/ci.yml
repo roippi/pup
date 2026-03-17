@@ -203,6 +203,8 @@ jobs:
             target/
           key: cargo-windows-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: cargo-windows-
+      - name: Enable long paths
+        run: git config --global core.longpaths true
       - name: Install NASM
         run: |
           choco install nasm -y
