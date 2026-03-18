@@ -35,7 +35,12 @@ pub async fn list(cfg: &Config, limit: i64) -> Result<()> {
 
 #[cfg(target_arch = "wasm32")]
 pub async fn list(cfg: &Config, _limit: i64) -> Result<()> {
-    let data = crate::api::get(cfg, "/api/v2/remote_config/products/obs_pipelines/pipelines", &[]).await?;
+    let data = crate::api::get(
+        cfg,
+        "/api/v2/remote_config/products/obs_pipelines/pipelines",
+        &[],
+    )
+    .await?;
     crate::formatter::output(cfg, &data)
 }
 

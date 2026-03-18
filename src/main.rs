@@ -4798,7 +4798,11 @@ enum NetworkInterfaceTagActions {
 enum ObsPipelinesActions {
     /// List observability pipelines
     List {
-        #[arg(long, default_value = "50", help = "Maximum number of pipelines to return")]
+        #[arg(
+            long,
+            default_value = "50",
+            help = "Maximum number of pipelines to return"
+        )]
         limit: i64,
     },
     /// Get pipeline details
@@ -4902,7 +4906,11 @@ enum LlmObsDatasetsActions {
 enum ReferenceTablesActions {
     /// List reference tables
     List {
-        #[arg(long, default_value = "50", help = "Maximum number of tables to return")]
+        #[arg(
+            long,
+            default_value = "50",
+            help = "Maximum number of tables to return"
+        )]
         limit: i64,
     },
     /// Get a reference table by ID
@@ -7886,7 +7894,10 @@ async fn main_inner() -> anyhow::Result<()> {
                         )
                         .await?;
                     }
-                    LlmObsExperimentsActions::Update { experiment_id, file } => {
+                    LlmObsExperimentsActions::Update {
+                        experiment_id,
+                        file,
+                    } => {
                         commands::llm_obs::experiments_update(&cfg, &experiment_id, &file).await?;
                     }
                     LlmObsExperimentsActions::Delete { file } => {

@@ -50,12 +50,7 @@ pub async fn get(cfg: &Config, table_id: &str) -> Result<()> {
 
 #[cfg(target_arch = "wasm32")]
 pub async fn get(cfg: &Config, table_id: &str) -> Result<()> {
-    let data = crate::api::get(
-        cfg,
-        &format!("/api/v2/reference-tables/{table_id}"),
-        &[],
-    )
-    .await?;
+    let data = crate::api::get(cfg, &format!("/api/v2/reference-tables/{table_id}"), &[]).await?;
     crate::formatter::output(cfg, &data)
 }
 
