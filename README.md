@@ -10,7 +10,7 @@ Every AI agent needs a loyal companion. Meet Pup — the CLI that gives your age
 
 ## What is Pup?
 
-A comprehensive, AI-agent-ready CLI with 200+ commands across 33 Datadog products. We've unleashed the full power of Datadog's APIs so your agents can fetch metrics, sniff out errors, and track down issues without barking up the wrong API tree.
+A comprehensive, AI-agent-ready CLI with 320+ commands across 56 Datadog product domains. We've unleashed the full power of Datadog's APIs so your agents can fetch metrics, sniff out errors, and track down issues without barking up the wrong API tree.
 
 AI agents are the fastest-growing interface for infrastructure management. Companies like Vercel and AWS are racing to make their platforms agent-accessible, but we're leading the pack. Pup makes Datadog the alpha choice for AI-native workflows with 100% documented API coverage while competitors are still learning basic commands.
 
@@ -39,9 +39,9 @@ pup metrics query --query="avg:system.cpu.user{*}"   # Track the metrics tail
 
 ## API Coverage
 
-<!-- Last updated: 2026-03-12 | API Client: datadog-api-client-rust v0.27 -->
+<!-- Last updated: 2026-03-17 | API Client: datadog-api-client-rust v0.28 -->
 
-Pup implements **49 of 85+ available Datadog APIs** (58% coverage) with **300+ subcommands** across **53 command groups**.
+Pup implements **52 of 85+ available Datadog APIs** (61% coverage) with **320+ subcommands** across **56 command groups**.
 
 See [docs/COMMANDS.md](docs/COMMANDS.md) for detailed command reference.
 
@@ -163,15 +163,17 @@ See [docs/COMMANDS.md](docs/COMMANDS.md) for detailed command reference.
 </details>
 
 <details>
-<summary><b>⚙️ Platform & Configuration (7/9 implemented)</b></summary>
+<summary><b>⚙️ Platform & Configuration (9/11 implemented)</b></summary>
 
 | API Domain | Status | Pup Commands | Notes |
 |------------|--------|--------------|-------|
 | Usage Metering | ✅ | `usage summary`, `usage hourly` | Usage and billing metrics |
-| Cost Management | ✅ | `cost projected`, `cost attribution`, `cost by-org` | Cost attribution by tags and organizations |
-| Product Analytics | ✅ | `product-analytics events send` | Server-side product analytics events |
+| Cost Management | ✅ | `cost projected`, `cost attribution`, `cost by-org`, `cost aws-config`, `cost azure-config`, `cost gcp-config` | Cost attribution plus AWS/Azure/GCP cloud cost config management |
+| Product Analytics | ✅ | `product-analytics events send`, `product-analytics query` | Server-side product analytics events and queries |
 | Integrations | ✅ | `integrations slack`, `integrations pagerduty`, `integrations webhooks`, `integrations jira`, `integrations servicenow`, `integrations google-chat` | Third-party integrations with Jira, ServiceNow, and Google Chat support |
-| Observability Pipelines | ⏳ | `obs-pipelines list`, `obs-pipelines get` | Placeholder — API endpoints pending |
+| Observability Pipelines | ✅ | `obs-pipelines list`, `obs-pipelines get`, `obs-pipelines create`, `obs-pipelines update`, `obs-pipelines delete`, `obs-pipelines validate` | Full pipeline CRUD and validation |
+| LLM Observability | ✅ | `llm-obs projects`, `llm-obs experiments`, `llm-obs datasets` | **New** — LLM Obs projects, experiments, and dataset management |
+| Reference Tables | ✅ | `reference-tables list`, `reference-tables get`, `reference-tables create`, `reference-tables batch-query` | **New** — Reference table management for log enrichment |
 | Miscellaneous | ✅ | `misc ip-ranges`, `misc status` | IP ranges and status |
 | App Builder | ✅ | `app-builder list`, `app-builder get`, `app-builder create`, `app-builder update`, `app-builder delete`, `app-builder publish` | Low-code app management with publish/unpublish and batch delete |
 | Key Management | ❌ | - | Not yet implemented |

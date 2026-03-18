@@ -1,6 +1,6 @@
 # Command Reference
 
-Complete reference for all 46 command groups in Pup.
+Complete reference for all 49 command groups in Pup.
 
 ## Command Pattern
 
@@ -49,11 +49,13 @@ pup <domain> <subgroup> <action> [options] # Nested commands
 | scorecards | list, get | src/commands/scorecards.rs | ✅ |
 | usage | summary, hourly | src/commands/usage.rs | ✅ |
 | apm | services (list, stats, operations, resources), entities (list), dependencies (list), flow-map | src/commands/apm.rs | ✅ |
-| cost | projected, attribution, by-org | src/commands/cost.rs | ✅ |
+| cost | projected, attribution, by-org, aws-config (list, get, create, delete), azure-config (list, get, create, delete), gcp-config (list, get, create, delete) | src/commands/cost.rs | ✅ |
 | product-analytics | events send | src/commands/product_analytics.rs | ✅ |
 | data-governance | scanner-rules (list) | src/commands/data_governance.rs | ✅ |
-| obs-pipelines | list, get | src/commands/obs_pipelines.rs | ⏳ |
-| network | flows, devices | src/commands/network.rs | ⏳ |
+| obs-pipelines | list, get, create, update, delete, validate | src/commands/obs_pipelines.rs | ✅ |
+| llm-obs | projects (create, list), experiments (create, list, update, delete), datasets (create, list) | src/commands/llm_obs.rs | ✅ |
+| reference-tables | list, get, create, batch-query | src/commands/reference_tables.rs | ✅ |
+| network | flows list, devices (list, get, interfaces, tags), interfaces (list, update) | src/commands/network.rs | ✅ |
 | cloud | aws, gcp, azure, oci | src/commands/cloud.rs | ✅ |
 | integrations | slack, pagerduty, webhooks, jira, servicenow | src/commands/integrations.rs | ✅ |
 | misc | ip-ranges, status | src/commands/misc.rs | ✅ |
@@ -65,10 +67,10 @@ pup <domain> <subgroup> <action> [options] # Nested commands
 | skills | list, install, path | src/commands/skills.rs | ✅ |
 | workflows | get, create, update, delete, run, instances (list, get, cancel) | src/commands/workflows.rs | ✅ |
 | investigations | list, get, trigger | src/commands/investigations.rs | ✅ |
-| change-management | create, get, update, create-branch, decisions (update, delete) | src/commands/change_management.rs | ✅ |
+| change-requests | create, get, update, create-branch, decisions (update, delete) | src/commands/change_management.rs | ✅ |
 | app-builder | list, get, create, update, delete, delete-batch, publish, unpublish | src/commands/app_builder.rs | ✅ |
 
-**Summary:** 43 working, 0 API-blocked, 2 placeholders
+**Summary:** 49 working, 0 API-blocked, 0 placeholders
 
 **Note:** RUM command is fully operational. Apps and sessions work completely. Metrics and retention-filters support list/get operations (create/update/delete operations pending due to complex API type structures).
 
@@ -136,7 +138,7 @@ pup infrastructure hosts list
 
 ### Infrastructure & Performance
 - **infrastructure** - Host inventory (hosts list, hosts get)
-- **network** - Network monitoring (flows list, devices list)
+- **network** - Network monitoring (flows list, devices list/get/interfaces/tags, interfaces list/update)
 - **tags** - Host tag management (list, get, add, update, delete)
 
 ### Security & Compliance
@@ -159,12 +161,12 @@ pup infrastructure hosts list
 ### Operations & Incident Response
 - **incidents** - Incident management (list, get, attachments, settings, handles, postmortem-templates)
 - **on-call** - Team management (create, update, delete teams; manage memberships with roles)
-- **cases** - Case management (create, search, assign, archive, projects, jira, servicenow, move)
+- **cases** - Case management (create, search, assign, archive, unarchive, update, projects, jira, servicenow, move)
 - **hamr** - High Availability Multi-Region connections
 - **fleet** - Fleet Automation (agents, deployments, schedules)
 - **workflows** - Workflow Automation (get, create, update, delete, run, instances)
 - **investigations** - Bits AI SRE investigations (list, get, trigger)
-- **change-management** - Change request management (create, get, update, create-branch, decisions)
+- **change-requests** - Change request management (create, get, update, create-branch, decisions)
 
 ### Organization & Access
 - **users** - User management (list, get, roles)
@@ -174,12 +176,14 @@ pup infrastructure hosts list
 
 ### Cost & Usage
 - **usage** - Usage and billing (summary, hourly)
-- **cost** - Cost management (projected, attribution, by-org)
+- **cost** - Cost management (projected, attribution, by-org, aws-config, azure-config, gcp-config)
 
 ### Configuration & Data Management
-- **obs-pipelines** - Observability pipelines (list, get)
+- **obs-pipelines** - Observability pipelines (list, get, create, update, delete, validate)
+- **llm-obs** - LLM Observability (projects, experiments, datasets)
+- **reference-tables** - Reference tables for log enrichment (list, get, create, batch-query)
 - **misc** - Miscellaneous (ip-ranges, status)
-- **product-analytics** - Product analytics events (send)
+- **product-analytics** - Product analytics events (send, query scalar/timeseries)
 - **app-builder** - Low-code app management (list, get, create, update, delete, publish, unpublish)
 
 ## Global Flags
@@ -197,20 +201,24 @@ Available on all commands:
 
 ## Recent Enhancements
 
-Recent API client updates added 3 new command groups and ~60 new subcommands across 9 existing domains.
+### v0.28.0 — New Command Groups and Full Pipeline Implementation
 
-### New Command Groups
-- ✅ **status-pages** - Status page management (pages, components, degradations CRUD)
-- ✅ **code-coverage** - Code coverage summaries (branch-level and commit-level)
-- ✅ **hamr** - High Availability Multi-Region connections
+- ✅ **llm-obs** (new) — LLM Observability: projects (create, list), experiments (create, list, update, delete), datasets (create, list)
+- ✅ **reference-tables** (new) — Reference table management (list, get, create, batch-query)
+- ✅ **obs-pipelines** (upgraded from placeholder) — Full CRUD: list, get, create, update, delete, validate
+- **cost** — Added cloud cost configs: `aws-config`, `azure-config`, `gcp-config` (list, get, create, delete each)
 
-### Enhanced Existing Commands
-- **integrations** - Added Jira integration (accounts, templates CRUD) and ServiceNow integration (instances, templates, users, assignment groups, business services)
-- **cloud** - Added OCI integration (tenancy configs CRUD, products)
-- **synthetics** - Added suites management (V2 API: search, get, create, update, delete)
-- **security** - Added content packs (list, activate, deactivate), bulk rule export, and entity risk scores
-- **incidents** - Added global settings, handles, and postmortem template management
-- **cases** - Added Jira/ServiceNow issue linking, case project moves, and notification rules
-- **cicd** - Added DORA deployment patching and flaky tests management
-- **slos** - Added SLO status query (V2 API)
-- **rum** - Replaced playlist/heatmap placeholders with working RUM Replay API implementations
+### v0.27.0 — Major Expansion
+
+- ✅ **status-pages** (new) — Status page management (pages, components, degradations CRUD)
+- ✅ **code-coverage** (new) — Code coverage summaries (branch-level and commit-level)
+- ✅ **hamr** (new) — High Availability Multi-Region connections
+- **integrations** — Added Jira integration (accounts, templates CRUD) and ServiceNow integration (instances, templates, users, assignment groups, business services)
+- **cloud** — Added OCI integration (tenancy configs CRUD, products)
+- **synthetics** — Added suites management (V2 API: search, get, create, update, delete)
+- **security** — Added content packs (list, activate, deactivate), bulk rule export, and entity risk scores
+- **incidents** — Added global settings, handles, and postmortem template management
+- **cases** — Added Jira/ServiceNow issue linking, case project moves, and notification rules
+- **cicd** — Added DORA deployment patching and flaky tests management
+- **slos** — Added SLO status query (V2 API)
+- **rum** — Replaced playlist/heatmap placeholders with working RUM Replay API implementations
