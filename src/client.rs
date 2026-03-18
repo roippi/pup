@@ -110,7 +110,7 @@ pub fn make_bearer_client(cfg: &Config) -> Option<ClientWithMiddleware> {
 // ---------------------------------------------------------------------------
 
 #[cfg(not(target_arch = "wasm32"))]
-/// All 63 unstable operations (snake_case for the Rust DD client).
+/// All 85 unstable operations (snake_case for the Rust DD client).
 static UNSTABLE_OPS: &[&str] = &[
     // Incidents (16)
     "v2.list_incidents",
@@ -205,6 +205,15 @@ static UNSTABLE_OPS: &[&str] = &[
     "v2.delete_aws_cloud_auth_persona_mapping",
     "v2.get_aws_cloud_auth_persona_mapping",
     "v2.list_aws_cloud_auth_persona_mappings",
+    // LLM Observability (8)
+    "v2.create_llm_obs_project",
+    "v2.list_llm_obs_projects",
+    "v2.create_llm_obs_experiment",
+    "v2.list_llm_obs_experiments",
+    "v2.update_llm_obs_experiment",
+    "v2.delete_llm_obs_experiments",
+    "v2.create_llm_obs_dataset",
+    "v2.list_llm_obs_datasets",
 ];
 
 // ---------------------------------------------------------------------------
@@ -553,7 +562,7 @@ mod tests {
 
     #[test]
     fn test_unstable_ops_count() {
-        assert_eq!(UNSTABLE_OPS.len(), 77);
+        assert_eq!(UNSTABLE_OPS.len(), 85);
     }
 
     #[test]
