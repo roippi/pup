@@ -412,6 +412,68 @@ static OAUTH_EXCLUDED_ENDPOINTS: &[EndpointRequirement] = &[
         path: "/api/v2/obs-pipelines/pipelines/validate",
         method: "POST",
     },
+    // Cost / Billing (9) — API key only, no OAuth support
+    EndpointRequirement {
+        path: "/api/v2/usage/projected_cost",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/usage/cost_by_org",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost_by_tag/monthly_cost_attribution",
+        method: "GET",
+    },
+    // Cloud Cost Management config (12)
+    EndpointRequirement {
+        path: "/api/v2/cost/aws_cur_config",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/aws_cur_config",
+        method: "POST",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/aws_cur_config/",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/aws_cur_config/",
+        method: "DELETE",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/azure_uc_config",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/azure_uc_config",
+        method: "POST",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/azure_uc_config/",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/azure_uc_config/",
+        method: "DELETE",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/gcp_uc_config",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/gcp_uc_config",
+        method: "POST",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/gcp_uc_config/",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/gcp_uc_config/",
+        method: "DELETE",
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -592,7 +654,7 @@ mod tests {
 
     #[test]
     fn test_oauth_excluded_count() {
-        assert_eq!(OAUTH_EXCLUDED_ENDPOINTS.len(), 30);
+        assert_eq!(OAUTH_EXCLUDED_ENDPOINTS.len(), 45);
     }
 
     #[test]

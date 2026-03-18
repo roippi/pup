@@ -14,12 +14,14 @@ use crate::formatter;
 use crate::util;
 
 #[cfg(not(target_arch = "wasm32"))]
+fn make_usage_api(cfg: &Config) -> UsageMeteringV2API {
+    // Cost/billing endpoints require API key auth — no OAuth support.
+    UsageMeteringV2API::with_config(client::make_dd_config(cfg))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn projected(cfg: &Config) -> Result<()> {
-    let dd_cfg = client::make_dd_config(cfg);
-    let api = match client::make_bearer_client(cfg) {
-        Some(c) => UsageMeteringV2API::with_client_and_config(dd_cfg, c),
-        None => UsageMeteringV2API::with_config(dd_cfg),
-    };
+    let api = make_usage_api(cfg);
     let resp = api
         .get_projected_cost(GetProjectedCostOptionalParams::default())
         .await
@@ -35,11 +37,7 @@ pub async fn projected(cfg: &Config) -> Result<()> {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn by_org(cfg: &Config, start_month: String, end_month: Option<String>) -> Result<()> {
-    let dd_cfg = client::make_dd_config(cfg);
-    let api = match client::make_bearer_client(cfg) {
-        Some(c) => UsageMeteringV2API::with_client_and_config(dd_cfg, c),
-        None => UsageMeteringV2API::with_config(dd_cfg),
-    };
+    let api = make_usage_api(cfg);
 
     let start_dt =
         chrono::DateTime::from_timestamp_millis(util::parse_time_to_unix_millis(&start_month)?)
@@ -76,11 +74,7 @@ pub async fn by_org(cfg: &Config, start_month: String, end_month: Option<String>
 
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn attribution(cfg: &Config, start: String, fields: Option<String>) -> Result<()> {
-    let dd_cfg = client::make_dd_config(cfg);
-    let api = match client::make_bearer_client(cfg) {
-        Some(c) => UsageMeteringV2API::with_client_and_config(dd_cfg, c),
-        None => UsageMeteringV2API::with_config(dd_cfg),
-    };
+    let api = make_usage_api(cfg);
 
     let start_dt =
         chrono::DateTime::from_timestamp_millis(util::parse_time_to_unix_millis(&start)?).unwrap();
@@ -112,11 +106,8 @@ pub async fn attribution(cfg: &Config, start: String, fields: Option<String>) ->
 
 #[cfg(not(target_arch = "wasm32"))]
 fn make_ccm_api(cfg: &Config) -> CloudCostManagementAPI {
-    let dd_cfg = client::make_dd_config(cfg);
-    match client::make_bearer_client(cfg) {
-        Some(c) => CloudCostManagementAPI::with_client_and_config(dd_cfg, c),
-        None => CloudCostManagementAPI::with_config(dd_cfg),
-    }
+    // CCM endpoints require API key auth — no OAuth support.
+    CloudCostManagementAPI::with_config(client::make_dd_config(cfg))
 }
 
 #[cfg(not(target_arch = "wasm32"))]
