@@ -15,11 +15,8 @@ use crate::util;
 
 #[cfg(not(target_arch = "wasm32"))]
 fn make_api(cfg: &Config) -> ObservabilityPipelinesAPI {
-    let dd_cfg = client::make_dd_config(cfg);
-    match client::make_bearer_client(cfg) {
-        Some(c) => ObservabilityPipelinesAPI::with_client_and_config(dd_cfg, c),
-        None => ObservabilityPipelinesAPI::with_config(dd_cfg),
-    }
+    // Observability Pipelines does not support OAuth — API key auth only.
+    ObservabilityPipelinesAPI::with_config(client::make_dd_config(cfg))
 }
 
 #[cfg(not(target_arch = "wasm32"))]

@@ -75,7 +75,6 @@ pub fn read_only_scopes() -> Vec<&'static str> {
         "metrics_read",
         "monitors_read",
         "notebooks_read",
-        "observability_pipelines_read",
         "oci_configuration_read",
         "cloud_cost_management_read",
         "rum_apps_read",
@@ -161,10 +160,6 @@ pub fn default_scopes() -> Vec<&'static str> {
         // Notebooks
         "notebooks_read",
         "notebooks_write",
-        // Observability Pipelines
-        "observability_pipelines_read",
-        "observability_pipelines_deploy",
-        "observability_pipelines_delete",
         // OCI
         "oci_configuration_edit",
         "oci_configuration_read",
@@ -253,7 +248,7 @@ mod tests {
     #[test]
     fn test_default_scopes() {
         let scopes = default_scopes();
-        assert_eq!(scopes.len(), 76);
+        assert_eq!(scopes.len(), 73);
         assert!(scopes.contains(&"dashboards_read"));
         assert!(scopes.contains(&"monitors_read"));
         assert!(scopes.contains(&"logs_read_data"));
