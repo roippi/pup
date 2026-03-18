@@ -52,6 +52,7 @@ pub fn read_only_scopes() -> Vec<&'static str> {
         "apm_service_catalog_read",
         "audit_logs_read",
         "azure_configuration_read",
+        "billing_read",
         "bits_investigations_read",
         "cases_read",
         "ci_visibility_read",
@@ -74,7 +75,9 @@ pub fn read_only_scopes() -> Vec<&'static str> {
         "metrics_read",
         "monitors_read",
         "notebooks_read",
+        "observability_pipelines_read",
         "oci_configuration_read",
+        "cloud_cost_management_read",
         "rum_apps_read",
         "rum_retention_filters_read",
         "rum_session_replay_read",
@@ -103,6 +106,8 @@ pub fn default_scopes() -> Vec<&'static str> {
         "audit_logs_read",
         // Azure
         "azure_configuration_read",
+        // Billing
+        "billing_read",
         // BITS
         "bits_investigations_read",
         "bits_investigations_write",
@@ -156,12 +161,19 @@ pub fn default_scopes() -> Vec<&'static str> {
         // Notebooks
         "notebooks_read",
         "notebooks_write",
+        // Observability Pipelines
+        "observability_pipelines_read",
+        "observability_pipelines_deploy",
+        "observability_pipelines_delete",
         // OCI
         "oci_configuration_edit",
         "oci_configuration_read",
         "oci_configurations_manage",
         // Organizations
         "org_management",
+        // Cloud Cost Management
+        "cloud_cost_management_read",
+        "cloud_cost_management_write",
         // RUM
         "rum_apps_read",
         "rum_apps_write",
@@ -241,7 +253,7 @@ mod tests {
     #[test]
     fn test_default_scopes() {
         let scopes = default_scopes();
-        assert_eq!(scopes.len(), 70);
+        assert_eq!(scopes.len(), 76);
         assert!(scopes.contains(&"dashboards_read"));
         assert!(scopes.contains(&"monitors_read"));
         assert!(scopes.contains(&"logs_read_data"));
@@ -262,7 +274,9 @@ mod tests {
         let ro = read_only_scopes();
         for scope in &ro {
             assert!(
-                !scope.contains("write") && !scope.contains("manage") && *scope != "org_management",
+                !scope.ends_with("_write")
+                    && !scope.ends_with("_manage")
+                    && *scope != "org_management",
                 "read_only_scopes should not contain write/manage scope: {scope}"
             );
         }
