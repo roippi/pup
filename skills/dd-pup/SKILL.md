@@ -193,6 +193,59 @@ pup notebooks get 12345
 pup notebooks create --file notebook.json
 ```
 
+### Observability Pipelines
+```bash
+pup obs-pipelines list
+pup obs-pipelines get <pipeline-id>
+pup obs-pipelines create --file pipeline.json
+pup obs-pipelines update <pipeline-id> --file pipeline.json
+pup obs-pipelines delete <pipeline-id>
+pup obs-pipelines validate --file pipeline.json
+```
+
+### LLM Observability
+```bash
+pup llm-obs projects list
+pup llm-obs projects create --file project.json
+pup llm-obs experiments list
+pup llm-obs experiments list --filter-project-id <project-id>
+pup llm-obs experiments list --filter-dataset-id <dataset-id>
+pup llm-obs experiments create --file experiment.json
+pup llm-obs experiments update <experiment-id> --file experiment.json
+pup llm-obs experiments delete --file delete-request.json
+pup llm-obs datasets list --project-id <project-id>
+pup llm-obs datasets create --project-id <project-id> --file dataset.json
+```
+
+### Reference Tables
+```bash
+pup reference-tables list
+pup reference-tables get <table-id>
+pup reference-tables create --file table.json
+pup reference-tables batch-query --file query.json
+```
+
+### Cost Cloud Configs
+```bash
+# AWS CUR configs
+pup cost aws-config list
+pup cost aws-config get <account-id>
+pup cost aws-config create --file config.json
+pup cost aws-config delete <account-id>
+
+# Azure UC configs
+pup cost azure-config list
+pup cost azure-config get <account-id>
+pup cost azure-config create --file config.json
+pup cost azure-config delete <account-id>
+
+# GCP usage cost configs
+pup cost gcp-config list
+pup cost gcp-config get <account-id>
+pup cost gcp-config create --file config.json
+pup cost gcp-config delete <account-id>
+```
+
 ## Subcommand Discovery
 
 ```bash

@@ -409,6 +409,7 @@ enum Commands {
     ///   pup auth logout
     ///
     ///   # Login to different Datadog site
+    ///   pup auth login --site datadoghq.eu
     ///   DD_SITE=datadoghq.eu pup auth login
     ///
     ///   # Login to a child org (multi-org support)
@@ -428,11 +429,13 @@ enum Commands {
     /// MULTI-SITE SUPPORT:
     ///   Each Datadog site maintains separate credentials:
     ///
-    ///   DD_SITE=datadoghq.com pup auth login     # US1 (default)
-    ///   DD_SITE=datadoghq.eu pup auth login      # EU1
-    ///   DD_SITE=us3.datadoghq.com pup auth login # US3
-    ///   DD_SITE=us5.datadoghq.com pup auth login # US5
-    ///   DD_SITE=ap1.datadoghq.com pup auth login # AP1
+    ///   pup auth login --site datadoghq.com     # US1 (default)
+    ///   pup auth login --site datadoghq.eu      # EU1
+    ///   pup auth login --site us3.datadoghq.com # US3
+    ///   pup auth login --site us5.datadoghq.com # US5
+    ///   pup auth login --site ap1.datadoghq.com # AP1
+    ///   DD_SITE=datadoghq.com pup auth login     # US1 (via env var)
+    ///   DD_SITE=datadoghq.eu pup auth login      # EU1 (via env var)
     ///
     /// MULTI-ORG SUPPORT:
     ///   Datadog parent/child sub-organizations each get their own session:
@@ -603,8 +606,8 @@ enum Commands {
     /// Generate shell completions for pup.
     ///
     /// Shell completions enable tab-completion of commands, subcommands, and flags
-    /// in your terminal. After generating completions, source or install them
-    /// according to your shell's requirements.
+    /// in your terminal. Use --install to automatically write completions to the
+    /// standard location for your shell, or pipe to stdout to manage it yourself.
     ///
     /// SUPPORTED SHELLS:
     ///   • bash: Bourne Again Shell
@@ -614,19 +617,24 @@ enum Commands {
     ///   • powershell: PowerShell
     ///
     /// EXAMPLES:
-    ///   # Generate bash completions
+    ///   # Auto-install completions (recommended)
+    ///   pup completions bash --install
+    ///   pup completions zsh --install
+    ///   pup completions fish --install
+    ///   pup completions powershell --install
+    ///
+    ///   # Or pipe to a custom location
     ///   pup completions bash > /etc/bash_completion.d/pup
-    ///
-    ///   # Generate zsh completions
     ///   pup completions zsh > ~/.zfunc/_pup
-    ///   # Then add to .zshrc: fpath+=~/.zfunc; autoload -Uz compinit; compinit
-    ///
-    ///   # Generate fish completions
     ///   pup completions fish > ~/.config/fish/completions/pup.fish
+    #[cfg(not(target_arch = "wasm32"))]
     #[command(verbatim_doc_comment)]
     Completions {
         /// Shell to generate completions for
         shell: clap_complete::Shell,
+        /// Install completions to the default location for the shell
+        #[arg(long)]
+        install: bool,
     },
     /// Manage cost and billing data
     ///
@@ -720,6 +728,26 @@ enum Commands {
     Dashboards {
         #[command(subcommand)]
         action: DashboardActions,
+    },
+    /// Query Datadog data using DDSQL (Datadog SQL)
+    ///
+    /// DDSQL lets you query metrics, logs, and reference tables using SQL syntax.
+    ///
+    /// COMMANDS:
+    ///   table        Execute query and return table data (supports -o json/yaml/table/csv)
+    ///   time-series  Execute query and return time series data
+    ///
+    /// EXAMPLES:
+    ///   pup ddsql table --query "SELECT * FROM reference_tables.offices_ips LIMIT 5"
+    ///   pup ddsql table --query "SELECT * FROM reference_tables.offices_ips" -o csv > results.csv
+    ///   pup ddsql time-series --query "SELECT avg(system.cpu.user) FROM metrics GROUP BY host" --from 1h --interval 300000
+    ///
+    /// AUTHENTICATION:
+    ///   Requires OAuth2 (via 'pup auth login') or API key + Application key.
+    #[command(verbatim_doc_comment)]
+    Ddsql {
+        #[command(subcommand)]
+        action: DdsqlActions,
     },
     /// Manage data governance
     ///
@@ -1845,6 +1873,82 @@ enum Commands {
         #[command(subcommand)]
         action: UserActions,
     },
+    /// Manage Datadog workflows
+    ///
+    /// Create, update, delete, and execute Datadog Workflow Automation workflows.
+    ///
+    /// CAPABILITIES:
+    ///   • Get workflow details
+    ///   • Create, update, and delete workflows
+    ///   • Execute workflows via API trigger (requires DD_API_KEY + DD_APP_KEY)
+    ///   • List, inspect, and cancel workflow instances (executions)
+    ///
+    /// EXAMPLES:
+    ///   # Get a workflow
+    ///   pup workflows get <workflow-id>
+    ///
+    ///   # Execute a workflow via API trigger
+    ///   pup workflows run <workflow-id> --payload '{"key": "value"}'
+    ///
+    ///   # Execute and wait for completion
+    ///   pup workflows run <workflow-id> --wait --timeout 2m
+    ///
+    ///   # List recent executions
+    ///   pup workflows instances list <workflow-id>
+    ///
+    ///   # Cancel a running execution
+    ///   pup workflows instances cancel <workflow-id> <instance-id>
+    ///
+    /// AUTHENTICATION:
+    ///   All workflow commands require DD_API_KEY + DD_APP_KEY.
+    ///   OAuth2 bearer tokens are not supported for workflow operations at this time.
+    #[command(verbatim_doc_comment)]
+    Workflows {
+        #[command(subcommand)]
+        action: WorkflowActions,
+    },
+    /// Manage LLM Observability projects, experiments, and datasets
+    ///
+    /// Manage LLM Observability resources for AI/ML application monitoring.
+    ///
+    /// CAPABILITIES:
+    ///   • Create and list LLM Obs projects
+    ///   • Create, list, update, and delete experiments
+    ///   • Create and list datasets within a project
+    ///
+    /// EXAMPLES:
+    ///   pup llm-obs projects list
+    ///   pup llm-obs experiments list
+    ///   pup llm-obs datasets list --project-id=my-project
+    ///
+    /// AUTHENTICATION:
+    ///   Requires either OAuth2 authentication or API keys.
+    #[command(name = "llm-obs", verbatim_doc_comment)]
+    LlmObs {
+        #[command(subcommand)]
+        action: LlmObsActions,
+    },
+    /// Manage reference tables for log enrichment
+    ///
+    /// Reference tables allow you to enrich logs with additional data from
+    /// CSV files stored in cloud storage or uploaded directly.
+    ///
+    /// CAPABILITIES:
+    ///   • List, get, and create reference tables
+    ///   • Batch query rows by primary key
+    ///
+    /// EXAMPLES:
+    ///   pup reference-tables list
+    ///   pup reference-tables get <table-id>
+    ///   pup reference-tables batch-query --file=query.json
+    ///
+    /// AUTHENTICATION:
+    ///   Requires either OAuth2 authentication or API keys.
+    #[command(name = "reference-tables", verbatim_doc_comment)]
+    ReferenceTables {
+        #[command(subcommand)]
+        action: ReferenceTablesActions,
+    },
     /// Print version information
     Version,
 }
@@ -2476,6 +2580,42 @@ enum DowntimeActions {
     Cancel { id: String },
 }
 
+// ---- DDSQL ----
+#[derive(Subcommand)]
+enum DdsqlActions {
+    /// Execute DDSQL query and return columnar table data
+    Table {
+        #[arg(long, help = "DDSQL query string")]
+        query: String,
+        #[arg(
+            long,
+            default_value = "1h",
+            help = "Start time (e.g., 1h, 30m, 7d, now, unix timestamp)"
+        )]
+        from: String,
+        #[arg(long, default_value = "now", help = "End time")]
+        to: String,
+        #[arg(long, help = "Aggregation interval in milliseconds (default: 60000)")]
+        interval: Option<i64>,
+        #[arg(long, default_value_t = 50, help = "Maximum number of rows to return")]
+        limit: i32,
+        #[arg(long, help = "Number of rows to skip (for pagination)")]
+        offset: Option<i32>,
+    },
+    /// Execute DDSQL query and return time series data
+    #[command(name = "time-series")]
+    TimeSeries {
+        #[arg(long, help = "DDSQL query string")]
+        query: String,
+        #[arg(long, default_value = "1h", help = "Start time")]
+        from: String,
+        #[arg(long, default_value = "now", help = "End time")]
+        to: String,
+        #[arg(long, help = "Aggregation interval in milliseconds (default: 60000)")]
+        interval: Option<i64>,
+    },
+}
+
 // ---- Tags ----
 #[derive(Subcommand)]
 enum TagActions {
@@ -2514,6 +2654,73 @@ enum UserActions {
 enum UserRoleActions {
     /// List roles
     List,
+}
+
+// ---- Workflows ----
+#[derive(Subcommand)]
+enum WorkflowActions {
+    /// Get a workflow by ID
+    Get { workflow_id: String },
+    /// Create a workflow from a JSON file
+    Create {
+        #[arg(long)]
+        file: String,
+    },
+    /// Update a workflow from a JSON file
+    Update {
+        workflow_id: String,
+        #[arg(long)]
+        file: String,
+    },
+    /// Delete a workflow
+    Delete { workflow_id: String },
+    /// Execute a workflow via API trigger (requires DD_API_KEY + DD_APP_KEY)
+    ///
+    /// The workflow must have an API trigger configured.
+    /// OAuth tokens are not supported — this command requires API key authentication.
+    #[command(verbatim_doc_comment)]
+    Run {
+        workflow_id: String,
+        #[arg(long, help = "JSON payload for workflow input parameters")]
+        payload: Option<String>,
+        #[arg(long, help = "Path to a JSON file with input parameters")]
+        payload_file: Option<String>,
+        #[arg(long, help = "Wait for the workflow to complete before returning")]
+        wait: bool,
+        #[arg(
+            long,
+            default_value = "5m",
+            help = "Timeout when --wait is set (e.g. 30s, 5m, 1h)"
+        )]
+        timeout: String,
+    },
+    /// Manage workflow instances (executions)
+    Instances {
+        #[command(subcommand)]
+        action: WorkflowInstanceActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum WorkflowInstanceActions {
+    /// List instances of a workflow
+    List {
+        workflow_id: String,
+        #[arg(long, default_value_t = 10, help = "Page size (max 100)")]
+        limit: i64,
+        #[arg(long, default_value_t = 0, help = "Page number")]
+        page: i64,
+    },
+    /// Get a specific workflow instance
+    Get {
+        workflow_id: String,
+        instance_id: String,
+    },
+    /// Cancel a running workflow instance
+    Cancel {
+        workflow_id: String,
+        instance_id: String,
+    },
 }
 
 // ---- Infrastructure ----
@@ -3874,6 +4081,20 @@ enum ErrorTrackingIssueActions {
             help = "Sort order: TOTAL_COUNT, FIRST_SEEN, IMPACTED_SESSIONS, PRIORITY"
         )]
         order_by: String,
+        #[arg(
+            long,
+            conflicts_with = "persona",
+            required_unless_present = "persona",
+            help = "Error source track: trace, logs, or rum"
+        )]
+        track: Option<String>,
+        #[arg(
+            long,
+            conflicts_with = "track",
+            required_unless_present = "track",
+            help = "Client persona filter: ALL, BROWSER, MOBILE, or BACKEND"
+        )]
+        persona: Option<String>,
     },
     /// Get issue details
     Get { issue_id: String },
@@ -4287,6 +4508,45 @@ enum CostActions {
         #[arg(long, help = "Tag keys for breakdown (required)")]
         fields: Option<String>,
     },
+    /// Manage AWS CUR cloud cost configs
+    #[command(name = "aws-config")]
+    AwsConfig {
+        #[command(subcommand)]
+        action: CostCloudConfigActions,
+    },
+    /// Manage Azure UC cloud cost configs
+    #[command(name = "azure-config")]
+    AzureConfig {
+        #[command(subcommand)]
+        action: CostCloudConfigActions,
+    },
+    /// Manage GCP usage cost configs
+    #[command(name = "gcp-config")]
+    GcpConfig {
+        #[command(subcommand)]
+        action: CostCloudConfigActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum CostCloudConfigActions {
+    /// List cloud cost configs
+    List,
+    /// Get a specific cloud cost config by ID
+    Get {
+        #[arg(help = "Cloud account ID")]
+        id: i64,
+    },
+    /// Create a cloud cost config from a JSON file
+    Create {
+        #[arg(long, help = "JSON file with config body (required)")]
+        file: String,
+    },
+    /// Delete a cloud cost config by ID
+    Delete {
+        #[arg(help = "Cloud account ID")]
+        id: i64,
+    },
 }
 
 // ---- Misc ----
@@ -4541,13 +4801,142 @@ enum NetworkInterfaceTagActions {
     },
 }
 
-// ---- Obs Pipelines (placeholder) ----
+// ---- Obs Pipelines ----
 #[derive(Subcommand)]
 enum ObsPipelinesActions {
     /// List observability pipelines
-    List,
+    List {
+        #[arg(
+            long,
+            default_value = "50",
+            help = "Maximum number of pipelines to return"
+        )]
+        limit: i64,
+    },
     /// Get pipeline details
     Get { pipeline_id: String },
+    /// Create a new pipeline from a JSON file
+    Create {
+        #[arg(long, help = "JSON file with pipeline spec body (required)")]
+        file: String,
+    },
+    /// Update an existing pipeline from a JSON file
+    Update {
+        pipeline_id: String,
+        #[arg(long, help = "JSON file with pipeline body (required)")]
+        file: String,
+    },
+    /// Delete a pipeline
+    Delete { pipeline_id: String },
+    /// Validate a pipeline configuration without creating it
+    Validate {
+        #[arg(long, help = "JSON file with pipeline spec body (required)")]
+        file: String,
+    },
+}
+
+// ---- LLM Observability ----
+#[derive(Subcommand)]
+enum LlmObsActions {
+    /// Manage LLM Observability projects
+    Projects {
+        #[command(subcommand)]
+        action: LlmObsProjectsActions,
+    },
+    /// Manage LLM Observability experiments
+    Experiments {
+        #[command(subcommand)]
+        action: LlmObsExperimentsActions,
+    },
+    /// Manage LLM Observability datasets
+    Datasets {
+        #[command(subcommand)]
+        action: LlmObsDatasetsActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum LlmObsProjectsActions {
+    /// Create a new LLM Obs project
+    Create {
+        #[arg(long, help = "JSON file with project body (required)")]
+        file: String,
+    },
+    /// List LLM Obs projects
+    List,
+}
+
+#[derive(Subcommand)]
+enum LlmObsExperimentsActions {
+    /// Create a new LLM Obs experiment
+    Create {
+        #[arg(long, help = "JSON file with experiment body (required)")]
+        file: String,
+    },
+    /// List LLM Obs experiments
+    List {
+        #[arg(long, help = "Filter by project ID")]
+        filter_project_id: Option<String>,
+        #[arg(long, help = "Filter by dataset ID")]
+        filter_dataset_id: Option<String>,
+    },
+    /// Update an existing LLM Obs experiment
+    Update {
+        experiment_id: String,
+        #[arg(long, help = "JSON file with experiment update body (required)")]
+        file: String,
+    },
+    /// Delete LLM Obs experiments (provide IDs in a JSON file)
+    Delete {
+        #[arg(long, help = "JSON file with experiment IDs to delete (required)")]
+        file: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum LlmObsDatasetsActions {
+    /// Create a new LLM Obs dataset
+    Create {
+        #[arg(long, help = "Project ID (required)")]
+        project_id: String,
+        #[arg(long, help = "JSON file with dataset body (required)")]
+        file: String,
+    },
+    /// List LLM Obs datasets for a project
+    List {
+        #[arg(long, help = "Project ID (required)")]
+        project_id: String,
+    },
+}
+
+// ---- Reference Tables ----
+#[derive(Subcommand)]
+enum ReferenceTablesActions {
+    /// List reference tables
+    List {
+        #[arg(
+            long,
+            default_value = "50",
+            help = "Maximum number of tables to return"
+        )]
+        limit: i64,
+    },
+    /// Get a reference table by ID
+    Get {
+        #[arg(help = "Table ID")]
+        table_id: String,
+    },
+    /// Create a reference table from a JSON file
+    Create {
+        #[arg(long, help = "JSON file with table body (required)")]
+        file: String,
+    },
+    /// Batch query reference table rows by primary key
+    #[command(name = "batch-query")]
+    BatchQuery {
+        #[arg(long, help = "JSON file with batch query body (required)")]
+        file: String,
+    },
 }
 
 // ---- Scorecards (placeholder) ----
@@ -4890,6 +5279,10 @@ enum AuthActions {
         /// Shorthand: --ro
         #[arg(long, alias = "ro", visible_alias = "ro")]
         read_only: bool,
+        /// Datadog site to authenticate against (e.g. datadoghq.eu, us3.datadoghq.com).
+        /// Overrides DD_SITE env var and config file. Defaults to datadoghq.com.
+        #[arg(long, value_name = "SITE")]
+        site: Option<String>,
     },
     /// Logout and clear tokens
     Logout,
@@ -6728,8 +7121,15 @@ async fn main_inner() -> anyhow::Result<()> {
             cfg.validate_auth()?;
             match action {
                 ErrorTrackingActions::Issues { action } => match action {
-                    ErrorTrackingIssueActions::Search { query, limit, .. } => {
-                        commands::error_tracking::issues_search(&cfg, query, limit).await?;
+                    ErrorTrackingIssueActions::Search {
+                        query,
+                        limit,
+                        track,
+                        persona,
+                        ..
+                    } => {
+                        commands::error_tracking::issues_search(&cfg, query, limit, track, persona)
+                            .await?;
                     }
                     ErrorTrackingIssueActions::Get { issue_id } => {
                         commands::error_tracking::issues_get(&cfg, &issue_id).await?;
@@ -7053,6 +7453,44 @@ async fn main_inner() -> anyhow::Result<()> {
                 CostActions::Attribution { start, fields, .. } => {
                     commands::cost::attribution(&cfg, start, fields).await?;
                 }
+                CostActions::AwsConfig { action } => match action {
+                    CostCloudConfigActions::List => commands::cost::aws_config_list(&cfg).await?,
+                    CostCloudConfigActions::Get { id } => {
+                        commands::cost::aws_config_get(&cfg, id).await?;
+                    }
+                    CostCloudConfigActions::Create { file } => {
+                        commands::cost::aws_config_create(&cfg, &file).await?;
+                    }
+                    CostCloudConfigActions::Delete { id } => {
+                        commands::cost::aws_config_delete(&cfg, id).await?;
+                    }
+                },
+                CostActions::AzureConfig { action } => match action {
+                    CostCloudConfigActions::List => {
+                        commands::cost::azure_config_list(&cfg).await?;
+                    }
+                    CostCloudConfigActions::Get { id } => {
+                        commands::cost::azure_config_get(&cfg, id).await?;
+                    }
+                    CostCloudConfigActions::Create { file } => {
+                        commands::cost::azure_config_create(&cfg, &file).await?;
+                    }
+                    CostCloudConfigActions::Delete { id } => {
+                        commands::cost::azure_config_delete(&cfg, id).await?;
+                    }
+                },
+                CostActions::GcpConfig { action } => match action {
+                    CostCloudConfigActions::List => commands::cost::gcp_config_list(&cfg).await?,
+                    CostCloudConfigActions::Get { id } => {
+                        commands::cost::gcp_config_get(&cfg, id).await?;
+                    }
+                    CostCloudConfigActions::Create { file } => {
+                        commands::cost::gcp_config_create(&cfg, &file).await?;
+                    }
+                    CostCloudConfigActions::Delete { id } => {
+                        commands::cost::gcp_config_delete(&cfg, id).await?;
+                    }
+                },
             }
         }
         // --- Misc ---
@@ -7113,6 +7551,31 @@ async fn main_inner() -> anyhow::Result<()> {
                     ..
                 } => {
                     commands::apm::flow_map(&cfg, query, limit, from, to).await?;
+                }
+            }
+        }
+        // --- DDSQL ---
+        Commands::Ddsql { action } => {
+            cfg.validate_auth()?;
+            match action {
+                DdsqlActions::Table {
+                    query,
+                    from,
+                    to,
+                    interval,
+                    limit,
+                    offset,
+                } => {
+                    commands::ddsql::table(&cfg, &query, &from, &to, interval, Some(limit), offset)
+                        .await?;
+                }
+                DdsqlActions::TimeSeries {
+                    query,
+                    from,
+                    to,
+                    interval,
+                } => {
+                    commands::ddsql::time_series(&cfg, &query, &from, &to, interval).await?;
                 }
             }
         }
@@ -7189,13 +7652,30 @@ async fn main_inner() -> anyhow::Result<()> {
                 }
             }
         },
-        // --- Obs Pipelines (placeholder) ---
-        Commands::ObsPipelines { action } => match action {
-            ObsPipelinesActions::List => commands::obs_pipelines::list()?,
-            ObsPipelinesActions::Get { pipeline_id } => {
-                commands::obs_pipelines::get(&pipeline_id)?;
+        // --- Obs Pipelines ---
+        Commands::ObsPipelines { action } => {
+            cfg.validate_auth()?;
+            match action {
+                ObsPipelinesActions::List { limit } => {
+                    commands::obs_pipelines::list(&cfg, limit).await?;
+                }
+                ObsPipelinesActions::Get { pipeline_id } => {
+                    commands::obs_pipelines::get(&cfg, &pipeline_id).await?;
+                }
+                ObsPipelinesActions::Create { file } => {
+                    commands::obs_pipelines::create(&cfg, &file).await?;
+                }
+                ObsPipelinesActions::Update { pipeline_id, file } => {
+                    commands::obs_pipelines::update(&cfg, &pipeline_id, &file).await?;
+                }
+                ObsPipelinesActions::Delete { pipeline_id } => {
+                    commands::obs_pipelines::delete(&cfg, &pipeline_id).await?;
+                }
+                ObsPipelinesActions::Validate { file } => {
+                    commands::obs_pipelines::validate(&cfg, &file).await?;
+                }
             }
-        },
+        }
         // --- Scorecards (placeholder) ---
         Commands::Scorecards { action } => match action {
             ScorecardsActions::List => commands::scorecards::list()?,
@@ -7318,7 +7798,14 @@ async fn main_inner() -> anyhow::Result<()> {
         }
         // --- Auth ---
         Commands::Auth { action } => match action {
-            AuthActions::Login { scopes, read_only } => {
+            AuthActions::Login {
+                scopes,
+                read_only,
+                site,
+            } => {
+                if let Some(s) = site {
+                    cfg.site = s;
+                }
                 let is_read_only = read_only || cfg.read_only;
                 let resolved =
                     resolve_login_scopes(scopes.as_deref(), cfg.org.as_deref(), is_read_only);
@@ -7331,9 +7818,142 @@ async fn main_inner() -> anyhow::Result<()> {
             AuthActions::Refresh => commands::auth::refresh(&cfg).await?,
             AuthActions::List => commands::auth::list(&cfg)?,
         },
+        // --- Workflows ---
+        Commands::Workflows { action } => {
+            cfg.validate_api_and_app_keys().map_err(|_| {
+                anyhow::anyhow!(
+                    "workflow commands require DD_API_KEY and DD_APP_KEY with workflow_* scopes\n\
+                     OAuth2 bearer tokens are not supported for workflow operations.\n\
+                     See: https://docs.datadoghq.com/api/latest/workflow-automation"
+                )
+            })?;
+            match action {
+                WorkflowActions::Get { workflow_id } => {
+                    commands::workflows::get(&cfg, &workflow_id).await?;
+                }
+                WorkflowActions::Create { file } => {
+                    commands::workflows::create(&cfg, &file).await?;
+                }
+                WorkflowActions::Update { workflow_id, file } => {
+                    commands::workflows::update(&cfg, &workflow_id, &file).await?;
+                }
+                WorkflowActions::Delete { workflow_id } => {
+                    commands::workflows::delete(&cfg, &workflow_id).await?;
+                }
+                WorkflowActions::Run {
+                    workflow_id,
+                    payload,
+                    payload_file,
+                    wait,
+                    timeout,
+                } => {
+                    commands::workflows::run(
+                        &cfg,
+                        &workflow_id,
+                        payload,
+                        payload_file,
+                        wait,
+                        &timeout,
+                    )
+                    .await?;
+                }
+                WorkflowActions::Instances { action } => match action {
+                    WorkflowInstanceActions::List {
+                        workflow_id,
+                        limit,
+                        page,
+                    } => {
+                        commands::workflows::instance_list(&cfg, &workflow_id, limit, page).await?;
+                    }
+                    WorkflowInstanceActions::Get {
+                        workflow_id,
+                        instance_id,
+                    } => {
+                        commands::workflows::instance_get(&cfg, &workflow_id, &instance_id).await?;
+                    }
+                    WorkflowInstanceActions::Cancel {
+                        workflow_id,
+                        instance_id,
+                    } => {
+                        commands::workflows::instance_cancel(&cfg, &workflow_id, &instance_id)
+                            .await?;
+                    }
+                },
+            }
+        }
+        // --- LLM Observability ---
+        Commands::LlmObs { action } => {
+            cfg.validate_auth()?;
+            match action {
+                LlmObsActions::Projects { action } => match action {
+                    LlmObsProjectsActions::Create { file } => {
+                        commands::llm_obs::projects_create(&cfg, &file).await?;
+                    }
+                    LlmObsProjectsActions::List => {
+                        commands::llm_obs::projects_list(&cfg).await?;
+                    }
+                },
+                LlmObsActions::Experiments { action } => match action {
+                    LlmObsExperimentsActions::Create { file } => {
+                        commands::llm_obs::experiments_create(&cfg, &file).await?;
+                    }
+                    LlmObsExperimentsActions::List {
+                        filter_project_id,
+                        filter_dataset_id,
+                    } => {
+                        commands::llm_obs::experiments_list(
+                            &cfg,
+                            filter_project_id,
+                            filter_dataset_id,
+                        )
+                        .await?;
+                    }
+                    LlmObsExperimentsActions::Update {
+                        experiment_id,
+                        file,
+                    } => {
+                        commands::llm_obs::experiments_update(&cfg, &experiment_id, &file).await?;
+                    }
+                    LlmObsExperimentsActions::Delete { file } => {
+                        commands::llm_obs::experiments_delete(&cfg, &file).await?;
+                    }
+                },
+                LlmObsActions::Datasets { action } => match action {
+                    LlmObsDatasetsActions::Create { project_id, file } => {
+                        commands::llm_obs::datasets_create(&cfg, &project_id, &file).await?;
+                    }
+                    LlmObsDatasetsActions::List { project_id } => {
+                        commands::llm_obs::datasets_list(&cfg, &project_id).await?;
+                    }
+                },
+            }
+        }
+        // --- Reference Tables ---
+        Commands::ReferenceTables { action } => {
+            cfg.validate_auth()?;
+            match action {
+                ReferenceTablesActions::List { limit } => {
+                    commands::reference_tables::list(&cfg, limit).await?;
+                }
+                ReferenceTablesActions::Get { table_id } => {
+                    commands::reference_tables::get(&cfg, &table_id).await?;
+                }
+                ReferenceTablesActions::Create { file } => {
+                    commands::reference_tables::create(&cfg, &file).await?;
+                }
+                ReferenceTablesActions::BatchQuery { file } => {
+                    commands::reference_tables::batch_query(&cfg, &file).await?;
+                }
+            }
+        }
         // --- Utility ---
-        Commands::Completions { shell } => {
-            clap_complete::generate(shell, &mut Cli::command(), "pup", &mut std::io::stdout());
+        #[cfg(not(target_arch = "wasm32"))]
+        Commands::Completions { shell, install } => {
+            if install {
+                commands::completions::install(shell)?;
+            } else {
+                commands::completions::generate(shell);
+            }
         }
         Commands::Version => println!("{}", version::build_info()),
         Commands::Test => commands::test::run(&cfg)?,

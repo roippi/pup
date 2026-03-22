@@ -110,7 +110,7 @@ pub fn make_bearer_client(cfg: &Config) -> Option<ClientWithMiddleware> {
 // ---------------------------------------------------------------------------
 
 #[cfg(not(target_arch = "wasm32"))]
-/// All 63 unstable operations (snake_case for the Rust DD client).
+/// All 85 unstable operations (snake_case for the Rust DD client).
 static UNSTABLE_OPS: &[&str] = &[
     // Incidents (16)
     "v2.list_incidents",
@@ -205,6 +205,15 @@ static UNSTABLE_OPS: &[&str] = &[
     "v2.delete_aws_cloud_auth_persona_mapping",
     "v2.get_aws_cloud_auth_persona_mapping",
     "v2.list_aws_cloud_auth_persona_mappings",
+    // LLM Observability (8)
+    "v2.create_llm_obs_project",
+    "v2.list_llm_obs_projects",
+    "v2.create_llm_obs_experiment",
+    "v2.list_llm_obs_experiments",
+    "v2.update_llm_obs_experiment",
+    "v2.delete_llm_obs_experiments",
+    "v2.create_llm_obs_dataset",
+    "v2.list_llm_obs_datasets",
 ];
 
 // ---------------------------------------------------------------------------
@@ -377,6 +386,93 @@ static OAUTH_EXCLUDED_ENDPOINTS: &[EndpointRequirement] = &[
     EndpointRequirement {
         path: "/api/v2/fleet/schedules/",
         method: "POST",
+    },
+    // Observability Pipelines (6) — API key only, no OAuth support
+    EndpointRequirement {
+        path: "/api/v2/obs-pipelines/pipelines",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/obs-pipelines/pipelines",
+        method: "POST",
+    },
+    EndpointRequirement {
+        path: "/api/v2/obs-pipelines/pipelines/",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/obs-pipelines/pipelines/",
+        method: "PUT",
+    },
+    EndpointRequirement {
+        path: "/api/v2/obs-pipelines/pipelines/",
+        method: "DELETE",
+    },
+    EndpointRequirement {
+        path: "/api/v2/obs-pipelines/pipelines/validate",
+        method: "POST",
+    },
+    // Cost / Billing (9) — API key only, no OAuth support
+    EndpointRequirement {
+        path: "/api/v2/usage/projected_cost",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/usage/cost_by_org",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost_by_tag/monthly_cost_attribution",
+        method: "GET",
+    },
+    // Cloud Cost Management config (12)
+    EndpointRequirement {
+        path: "/api/v2/cost/aws_cur_config",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/aws_cur_config",
+        method: "POST",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/aws_cur_config/",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/aws_cur_config/",
+        method: "DELETE",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/azure_uc_config",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/azure_uc_config",
+        method: "POST",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/azure_uc_config/",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/azure_uc_config/",
+        method: "DELETE",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/gcp_uc_config",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/gcp_uc_config",
+        method: "POST",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/gcp_uc_config/",
+        method: "GET",
+    },
+    EndpointRequirement {
+        path: "/api/v2/cost/gcp_uc_config/",
+        method: "DELETE",
     },
 ];
 
@@ -558,12 +654,12 @@ mod tests {
 
     #[test]
     fn test_unstable_ops_count() {
-        assert_eq!(UNSTABLE_OPS.len(), 77);
+        assert_eq!(UNSTABLE_OPS.len(), 85);
     }
 
     #[test]
     fn test_oauth_excluded_count() {
-        assert_eq!(OAUTH_EXCLUDED_ENDPOINTS.len(), 24);
+        assert_eq!(OAUTH_EXCLUDED_ENDPOINTS.len(), 45);
     }
 
     #[test]

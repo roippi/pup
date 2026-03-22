@@ -1,5 +1,7 @@
 use anyhow::Result;
 #[cfg(not(target_arch = "wasm32"))]
+use datadog_api_client::datadogV2::api_cloud_cost_management::CloudCostManagementAPI;
+#[cfg(not(target_arch = "wasm32"))]
 use datadog_api_client::datadogV2::api_usage_metering::{
     GetCostByOrgOptionalParams, GetMonthlyCostAttributionOptionalParams,
     GetProjectedCostOptionalParams, UsageMeteringAPI as UsageMeteringV2API,
@@ -12,12 +14,14 @@ use crate::formatter;
 use crate::util;
 
 #[cfg(not(target_arch = "wasm32"))]
+fn make_usage_api(cfg: &Config) -> UsageMeteringV2API {
+    // Cost/billing endpoints require API key auth — no OAuth support.
+    UsageMeteringV2API::with_config(client::make_dd_config(cfg))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn projected(cfg: &Config) -> Result<()> {
-    let dd_cfg = client::make_dd_config(cfg);
-    let api = match client::make_bearer_client(cfg) {
-        Some(c) => UsageMeteringV2API::with_client_and_config(dd_cfg, c),
-        None => UsageMeteringV2API::with_config(dd_cfg),
-    };
+    let api = make_usage_api(cfg);
     let resp = api
         .get_projected_cost(GetProjectedCostOptionalParams::default())
         .await
@@ -33,11 +37,7 @@ pub async fn projected(cfg: &Config) -> Result<()> {
 
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn by_org(cfg: &Config, start_month: String, end_month: Option<String>) -> Result<()> {
-    let dd_cfg = client::make_dd_config(cfg);
-    let api = match client::make_bearer_client(cfg) {
-        Some(c) => UsageMeteringV2API::with_client_and_config(dd_cfg, c),
-        None => UsageMeteringV2API::with_config(dd_cfg),
-    };
+    let api = make_usage_api(cfg);
 
     let start_dt =
         chrono::DateTime::from_timestamp_millis(util::parse_time_to_unix_millis(&start_month)?)
@@ -74,11 +74,7 @@ pub async fn by_org(cfg: &Config, start_month: String, end_month: Option<String>
 
 #[cfg(not(target_arch = "wasm32"))]
 pub async fn attribution(cfg: &Config, start: String, fields: Option<String>) -> Result<()> {
-    let dd_cfg = client::make_dd_config(cfg);
-    let api = match client::make_bearer_client(cfg) {
-        Some(c) => UsageMeteringV2API::with_client_and_config(dd_cfg, c),
-        None => UsageMeteringV2API::with_config(dd_cfg),
-    };
+    let api = make_usage_api(cfg);
 
     let start_dt =
         chrono::DateTime::from_timestamp_millis(util::parse_time_to_unix_millis(&start)?).unwrap();
@@ -104,4 +100,220 @@ pub async fn attribution(cfg: &Config, start: String, fields: Option<String>) ->
     ];
     let data = crate::api::get(cfg, "/api/v2/cost_by_tag/monthly_cost_attribution", &query).await?;
     crate::formatter::output(cfg, &data)
+}
+
+// ---- Cloud Cost Management — AWS CUR Config ----
+
+#[cfg(not(target_arch = "wasm32"))]
+fn make_ccm_api(cfg: &Config) -> CloudCostManagementAPI {
+    // CCM endpoints require API key auth — no OAuth support.
+    CloudCostManagementAPI::with_config(client::make_dd_config(cfg))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn aws_config_list(cfg: &Config) -> Result<()> {
+    let api = make_ccm_api(cfg);
+    let resp = api
+        .list_cost_awscur_configs()
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to list AWS CUR configs: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn aws_config_list(cfg: &Config) -> Result<()> {
+    let data = crate::api::get(cfg, "/api/v2/cost/aws_cur_config", &[]).await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn aws_config_get(cfg: &Config, id: i64) -> Result<()> {
+    let api = make_ccm_api(cfg);
+    let resp = api
+        .get_cost_awscur_config(id)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to get AWS CUR config: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn aws_config_get(cfg: &Config, id: i64) -> Result<()> {
+    let data = crate::api::get(cfg, &format!("/api/v2/cost/aws_cur_config/{id}"), &[]).await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn aws_config_create(cfg: &Config, file: &str) -> Result<()> {
+    let body: datadog_api_client::datadogV2::model::AwsCURConfigPostRequest =
+        util::read_json_file(file)?;
+    let api = make_ccm_api(cfg);
+    let resp = api
+        .create_cost_awscur_config(body)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to create AWS CUR config: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn aws_config_create(cfg: &Config, file: &str) -> Result<()> {
+    let body: serde_json::Value = util::read_json_file(file)?;
+    let data = crate::api::post(cfg, "/api/v2/cost/aws_cur_config", &body).await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn aws_config_delete(cfg: &Config, id: i64) -> Result<()> {
+    let api = make_ccm_api(cfg);
+    api.delete_cost_awscur_config(id)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to delete AWS CUR config: {e:?}"))?;
+    eprintln!("AWS CUR config {id} deleted.");
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn aws_config_delete(cfg: &Config, id: i64) -> Result<()> {
+    crate::api::delete(cfg, &format!("/api/v2/cost/aws_cur_config/{id}")).await?;
+    eprintln!("AWS CUR config {id} deleted.");
+    Ok(())
+}
+
+// ---- Cloud Cost Management — Azure UC Config ----
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn azure_config_list(cfg: &Config) -> Result<()> {
+    let api = make_ccm_api(cfg);
+    let resp = api
+        .list_cost_azure_uc_configs()
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to list Azure UC configs: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn azure_config_list(cfg: &Config) -> Result<()> {
+    let data = crate::api::get(cfg, "/api/v2/cost/azure_uc_config", &[]).await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn azure_config_get(cfg: &Config, id: i64) -> Result<()> {
+    let api = make_ccm_api(cfg);
+    let resp = api
+        .get_cost_azure_uc_config(id)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to get Azure UC config: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn azure_config_get(cfg: &Config, id: i64) -> Result<()> {
+    let data = crate::api::get(cfg, &format!("/api/v2/cost/azure_uc_config/{id}"), &[]).await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn azure_config_create(cfg: &Config, file: &str) -> Result<()> {
+    let body: datadog_api_client::datadogV2::model::AzureUCConfigPostRequest =
+        util::read_json_file(file)?;
+    let api = make_ccm_api(cfg);
+    let resp = api
+        .create_cost_azure_uc_configs(body)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to create Azure UC config: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn azure_config_create(cfg: &Config, file: &str) -> Result<()> {
+    let body: serde_json::Value = util::read_json_file(file)?;
+    let data = crate::api::post(cfg, "/api/v2/cost/azure_uc_config", &body).await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn azure_config_delete(cfg: &Config, id: i64) -> Result<()> {
+    let api = make_ccm_api(cfg);
+    api.delete_cost_azure_uc_config(id)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to delete Azure UC config: {e:?}"))?;
+    eprintln!("Azure UC config {id} deleted.");
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn azure_config_delete(cfg: &Config, id: i64) -> Result<()> {
+    crate::api::delete(cfg, &format!("/api/v2/cost/azure_uc_config/{id}")).await?;
+    eprintln!("Azure UC config {id} deleted.");
+    Ok(())
+}
+
+// ---- Cloud Cost Management — GCP Usage Cost Config ----
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn gcp_config_list(cfg: &Config) -> Result<()> {
+    let api = make_ccm_api(cfg);
+    let resp = api
+        .list_cost_gcp_usage_cost_configs()
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to list GCP usage cost configs: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn gcp_config_list(cfg: &Config) -> Result<()> {
+    let data = crate::api::get(cfg, "/api/v2/cost/gcp_uc_config", &[]).await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn gcp_config_get(cfg: &Config, id: i64) -> Result<()> {
+    let api = make_ccm_api(cfg);
+    let resp = api
+        .get_cost_gcp_usage_cost_config(id)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to get GCP usage cost config: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn gcp_config_get(cfg: &Config, id: i64) -> Result<()> {
+    let data = crate::api::get(cfg, &format!("/api/v2/cost/gcp_uc_config/{id}"), &[]).await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn gcp_config_create(cfg: &Config, file: &str) -> Result<()> {
+    let body: datadog_api_client::datadogV2::model::GCPUsageCostConfigPostRequest =
+        util::read_json_file(file)?;
+    let api = make_ccm_api(cfg);
+    let resp = api
+        .create_cost_gcp_usage_cost_config(body)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to create GCP usage cost config: {e:?}"))?;
+    formatter::output(cfg, &resp)
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn gcp_config_create(cfg: &Config, file: &str) -> Result<()> {
+    let body: serde_json::Value = util::read_json_file(file)?;
+    let data = crate::api::post(cfg, "/api/v2/cost/gcp_uc_config", &body).await?;
+    crate::formatter::output(cfg, &data)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn gcp_config_delete(cfg: &Config, id: i64) -> Result<()> {
+    let api = make_ccm_api(cfg);
+    api.delete_cost_gcp_usage_cost_config(id)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to delete GCP usage cost config: {e:?}"))?;
+    eprintln!("GCP usage cost config {id} deleted.");
+    Ok(())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub async fn gcp_config_delete(cfg: &Config, id: i64) -> Result<()> {
+    crate::api::delete(cfg, &format!("/api/v2/cost/gcp_uc_config/{id}")).await?;
+    eprintln!("GCP usage cost config {id} deleted.");
+    Ok(())
 }
