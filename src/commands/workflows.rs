@@ -259,7 +259,13 @@ pub async fn instance_list(cfg: &Config, workflow_id: &str, limit: i64, page: i6
         command: Some("workflows instances list".to_string()),
         next_action: None,
     };
-    formatter::format_and_print(&resp, &cfg.output_format, cfg.agent_mode, Some(&meta))
+    formatter::format_and_print(
+        &resp,
+        &cfg.output_format,
+        cfg.agent_mode,
+        crate::formatter::compress_cfg_from(cfg, meta.command.as_deref()).as_ref(),
+        Some(&meta),
+    )
 }
 
 #[cfg(target_arch = "wasm32")]
