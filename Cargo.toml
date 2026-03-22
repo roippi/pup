@@ -62,6 +62,7 @@ browser = [
     "dep:web-sys",
     "dep:serde-wasm-bindgen",
     "dep:getrandom",
+    "dep:chrono",
 ]
 
 [dependencies]
