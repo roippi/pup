@@ -1,9 +1,9 @@
 use crate::config::Config;
-/// ACP (Agent Communication Protocol) server that proxies to Bits AI assistant.
+/// ACP (Agent Communication Protocol) server that proxies to Datadog lassie-ng.
 ///
 /// Starts a local HTTP server implementing ACP and delegates requests to
-/// the Datadog Bits AI endpoint (/api/v2/assistant). Authentication uses
-/// OAuth2 bearer token or API key + app key.
+/// the lassie-ng agent endpoint (/api/unstable/lassie-ng/v1/agents/{id}/messages).
+/// Requires OAuth2 with notebooks_read + notebooks_write scopes, or API key auth.
 ///
 /// Protocol:  https://agentcommunicationprotocol.dev/
 /// Endpoint:  GET  /agent.json       — agent card
@@ -20,10 +20,31 @@ use tokio::{
 pub const DEFAULT_PORT: u16 = 9099;
 pub const DEFAULT_HOST: &str = "127.0.0.1";
 
+const LASSIE_BASE: &str = "/api/unstable/lassie-ng/v1";
+
 /// Starts the ACP server on the given host and port.
 #[cfg(not(target_arch = "wasm32"))]
-pub async fn serve(cfg: &Config, port: u16, host: &str) -> Result<()> {
+pub async fn serve(cfg: &Config, port: u16, host: &str, agent_id: Option<String>) -> Result<()> {
     cfg.validate_auth()?;
+
+    let app_base = format!("https://app.{}", cfg.site);
+    let access_token = cfg.access_token.clone();
+    let api_key = cfg.api_key.clone();
+    let app_key = cfg.app_key.clone();
+
+    // Resolve agent ID: use provided value or auto-discover from GET /agents.
+    let agent_id = match agent_id {
+        Some(id) if !id.is_empty() => id,
+        _ => {
+            resolve_agent_id(
+                &app_base,
+                access_token.as_deref(),
+                api_key.as_deref(),
+                app_key.as_deref(),
+            )
+            .await?
+        }
+    };
 
     let addr = format!("{host}:{port}");
     let listener = TcpListener::bind(&addr)
@@ -35,17 +56,13 @@ pub async fn serve(cfg: &Config, port: u16, host: &str) -> Result<()> {
     eprintln!("  Agent card:  GET  {base_url}/agent.json");
     eprintln!("  Sync run:    POST {base_url}/runs");
     eprintln!("  Stream run:  POST {base_url}/runs/stream");
+    eprintln!("  Lassie agent: {app_base}{LASSIE_BASE}/agents/{agent_id}");
     eprintln!("Press Ctrl+C to stop.");
-
-    // Construct app base URL: https://app.<site> (e.g. app.datadoghq.com)
-    let app_base = format!("https://app.{}", cfg.site);
-    let access_token = cfg.access_token.clone();
-    let api_key = cfg.api_key.clone();
-    let app_key = cfg.app_key.clone();
 
     loop {
         let (stream, peer_addr) = listener.accept().await?;
         let app_base = app_base.clone();
+        let agent_id = agent_id.clone();
         let access_token = access_token.clone();
         let api_key = api_key.clone();
         let app_key = app_key.clone();
@@ -55,6 +72,7 @@ pub async fn serve(cfg: &Config, port: u16, host: &str) -> Result<()> {
                 stream,
                 peer_addr,
                 &app_base,
+                &agent_id,
                 access_token.as_deref(),
                 api_key.as_deref(),
                 app_key.as_deref(),
@@ -67,11 +85,62 @@ pub async fn serve(cfg: &Config, port: u16, host: &str) -> Result<()> {
     }
 }
 
+/// Fetches the first available agent from lassie-ng GET /agents.
+#[cfg(not(target_arch = "wasm32"))]
+async fn resolve_agent_id(
+    app_base: &str,
+    access_token: Option<&str>,
+    api_key: Option<&str>,
+    app_key: Option<&str>,
+) -> Result<String> {
+    let url = format!("{app_base}{LASSIE_BASE}/agents?limit=1");
+    let client = reqwest::Client::new();
+    let mut req = client.get(&url).header("Accept", "application/json");
+    req = add_auth(req, access_token, api_key, app_key)?;
+
+    let resp = req
+        .send()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to list agents: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!("GET /agents failed (HTTP {status}): {body}");
+    }
+
+    let val: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to parse agents response: {e}"))?;
+
+    // Response is an array of agents
+    let agents = val
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("Unexpected agents response format"))?;
+
+    if agents.is_empty() {
+        anyhow::bail!(
+            "No agents found in lassie-ng. Create one first or pass --agent-id.\n\
+             Hint: use the Datadog UI at app.datadoghq.com to create an agent."
+        );
+    }
+
+    let id = agents[0]
+        .get("id")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("Agent missing 'id' field"))?;
+
+    eprintln!("Auto-discovered agent: {id}");
+    Ok(id.to_string())
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 async fn handle_connection(
     stream: tokio::net::TcpStream,
     peer_addr: std::net::SocketAddr,
     app_base: &str,
+    agent_id: &str,
     access_token: Option<&str>,
     api_key: Option<&str>,
     app_key: Option<&str>,
@@ -114,12 +183,13 @@ async fn handle_connection(
 
     match (method, path) {
         ("GET", "/agent.json") | ("GET", "/.well-known/agent.json") => {
-            write_agent_card(&mut writer).await
+            write_agent_card(&mut writer, agent_id).await
         }
         ("POST", "/runs") => {
             handle_run(
                 &mut writer,
                 app_base,
+                agent_id,
                 access_token,
                 api_key,
                 app_key,
@@ -132,6 +202,7 @@ async fn handle_connection(
             handle_run(
                 &mut writer,
                 app_base,
+                agent_id,
                 access_token,
                 api_key,
                 app_key,
@@ -141,7 +212,6 @@ async fn handle_connection(
             .await
         }
         ("OPTIONS", _) => {
-            // CORS preflight
             writer
                 .write_all(
                     b"HTTP/1.1 204 No Content\r\n\
@@ -158,10 +228,10 @@ async fn handle_connection(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-async fn write_agent_card(writer: &mut OwnedWriteHalf) -> Result<()> {
+async fn write_agent_card(writer: &mut OwnedWriteHalf, agent_id: &str) -> Result<()> {
     let card = serde_json::json!({
-        "name": "Bits AI",
-        "description": "Datadog Bits AI assistant — answers questions about your Datadog environment, metrics, logs, monitors, and more.",
+        "name": "Datadog AI Agent",
+        "description": "Datadog lassie-ng AI agent — answers questions about your Datadog environment, metrics, logs, monitors, and more.",
         "version": "1.0.0",
         "url": "",
         "capabilities": {
@@ -169,7 +239,9 @@ async fn write_agent_card(writer: &mut OwnedWriteHalf) -> Result<()> {
         },
         "metadata": {
             "provider": "Datadog",
-            "endpoint": "/api/v2/assistant"
+            "backend": "lassie-ng",
+            "agent_id": agent_id,
+            "endpoint": format!("{LASSIE_BASE}/agents/{agent_id}/messages")
         }
     });
     write_json_response(writer, 200, card).await
@@ -177,16 +249,17 @@ async fn write_agent_card(writer: &mut OwnedWriteHalf) -> Result<()> {
 
 /// Handles both sync (`POST /runs`) and streaming (`POST /runs/stream`) ACP requests.
 #[cfg(not(target_arch = "wasm32"))]
+#[allow(clippy::too_many_arguments)]
 async fn handle_run(
     writer: &mut OwnedWriteHalf,
     app_base: &str,
+    agent_id: &str,
     access_token: Option<&str>,
     api_key: Option<&str>,
     app_key: Option<&str>,
     body: &[u8],
     streaming: bool,
 ) -> Result<()> {
-    // Parse ACP request body
     let acp_req: serde_json::Value = match serde_json::from_slice(body) {
         Ok(v) => v,
         Err(e) => {
@@ -205,62 +278,47 @@ async fn handle_run(
             return write_json_response(
                 writer,
                 400,
-                serde_json::json!({"error": "missing message content in input"}),
+                serde_json::json!({"error": "missing user message in input"}),
             )
             .await;
         }
     };
 
-    // session_id maps to conversation_id for multi-turn conversations
-    let conversation_id = acp_req
-        .get("session_id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .to_string();
+    let acp_run_id = uuid::Uuid::new_v4().to_string();
 
-    let run_id = uuid::Uuid::new_v4().to_string();
-
-    // Build Bits AI request payload
-    let bits_body = serde_json::json!({
-        "data": {
-            "id": "assistant-request",
-            "type": "assistant-request",
-            "attributes": {
-                "message": {
-                    "type": "markdown_fragment",
-                    "content": message
-                },
-                "conversation_id": conversation_id,
-                "context": {"entities": []},
-                "enable_debug_mode": false
-            }
-        }
+    // lassie-ng request: {"input": "...", "stream": bool}
+    let lassie_body = serde_json::json!({
+        "input": message,
+        "stream": streaming,
     });
 
-    // Send request to Bits AI
-    let bits_url = format!("{app_base}/api/v2/assistant");
+    let url = format!("{app_base}{LASSIE_BASE}/agents/{agent_id}/messages");
     let client = reqwest::Client::new();
     let mut req = client
-        .post(&bits_url)
+        .post(&url)
         .header("Content-Type", "application/json")
-        .header("Accept", "text/event-stream");
+        .header(
+            "Accept",
+            if streaming {
+                "text/event-stream"
+            } else {
+                "application/json"
+            },
+        );
 
-    if let Some(token) = access_token {
-        req = req.header("Authorization", format!("Bearer {token}"));
-    } else if let (Some(ak), Some(apk)) = (api_key, app_key) {
-        req = req
-            .header("DD-API-KEY", ak)
-            .header("DD-APPLICATION-KEY", apk);
-    } else {
-        return write_json_response(
-            writer,
-            401,
-            serde_json::json!({"error": "no authentication configured"}),
-        )
-        .await;
-    }
+    req = match add_auth(req, access_token, api_key, app_key) {
+        Ok(r) => r,
+        Err(_) => {
+            return write_json_response(
+                writer,
+                401,
+                serde_json::json!({"error": "no authentication configured"}),
+            )
+            .await;
+        }
+    };
 
-    let resp = match req.json(&bits_body).send().await {
+    let resp = match req.json(&lassie_body).send().await {
         Ok(r) => r,
         Err(e) => {
             return write_json_response(
@@ -278,52 +336,54 @@ async fn handle_run(
         return write_json_response(
             writer,
             status,
-            serde_json::json!({"error": format!("Bits AI error (HTTP {status}): {err_body}")}),
+            serde_json::json!({"error": format!("lassie-ng error (HTTP {status}): {err_body}")}),
         )
         .await;
     }
 
     if streaming {
-        stream_bits_ai_to_acp(writer, resp, &run_id).await
+        stream_lassie_to_acp(writer, resp, &acp_run_id, agent_id).await
     } else {
-        collect_bits_ai_to_acp(writer, resp, &run_id).await
+        collect_lassie_to_acp(writer, resp, &acp_run_id, agent_id).await
     }
 }
 
-/// Collects the full Bits AI SSE stream and returns a single ACP run response.
+/// Collects the full lassie-ng JSON response and returns a single ACP run response.
 #[cfg(not(target_arch = "wasm32"))]
-async fn collect_bits_ai_to_acp(
+async fn collect_lassie_to_acp(
     writer: &mut OwnedWriteHalf,
     resp: reqwest::Response,
     run_id: &str,
+    agent_id: &str,
 ) -> Result<()> {
-    let (text, session_id) = collect_markdown_from_stream(resp).await?;
+    let val: serde_json::Value = resp
+        .json()
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to parse lassie-ng response: {e}"))?;
 
-    let output = serde_json::json!([{
-        "role": "assistant",
-        "content": [{"type": "text", "text": text}]
-    }]);
+    let text = extract_lassie_text(&val);
+    let lassie_run_id = val.get("run_id").and_then(|v| v.as_str()).unwrap_or(run_id);
 
     let body = serde_json::json!({
         "run_id": run_id,
-        "agent_id": "bits-ai",
-        "session_id": session_id,
+        "agent_id": agent_id,
+        "session_id": lassie_run_id,
         "status": "completed",
-        "output": output
+        "output": [{"role": "assistant", "content": [{"type": "text", "text": text}]}]
     });
     write_json_response(writer, 200, body).await
 }
 
-/// Streams Bits AI SSE output as ACP SSE events.
+/// Streams lassie-ng SSE output as ACP SSE events.
 #[cfg(not(target_arch = "wasm32"))]
-async fn stream_bits_ai_to_acp(
+async fn stream_lassie_to_acp(
     writer: &mut OwnedWriteHalf,
     resp: reqwest::Response,
-    run_id: &str,
+    acp_run_id: &str,
+    agent_id: &str,
 ) -> Result<()> {
     use futures::StreamExt;
 
-    // Write SSE response headers
     writer
         .write_all(
             b"HTTP/1.1 200 OK\r\n\
@@ -335,22 +395,20 @@ async fn stream_bits_ai_to_acp(
         )
         .await?;
 
-    // Send run_created event
     write_sse_event(
         writer,
         "run_created",
         &serde_json::json!({
             "type": "run_created",
-            "run_id": run_id,
-            "agent_id": "bits-ai",
+            "run_id": acp_run_id,
+            "agent_id": agent_id,
             "status": "running"
         }),
     )
     .await?;
 
     let mut buffer = String::new();
-    let mut session_id = String::new();
-    let mut message_id: Option<String> = None;
+    let mut lassie_run_id = String::new();
     let mut message_started = false;
     let mut full_text = String::new();
     let mut bytes_stream = resp.bytes_stream();
@@ -359,7 +417,6 @@ async fn stream_bits_ai_to_acp(
         let chunk = chunk_result.map_err(|e| anyhow::anyhow!("stream read error: {e}"))?;
         buffer.push_str(&String::from_utf8_lossy(&chunk));
 
-        // Process complete SSE event blocks (separated by double newline)
         while let Some(end) = buffer.find("\n\n") {
             let event_block = buffer[..end].to_string();
             buffer = buffer[end + 2..].to_string();
@@ -368,138 +425,144 @@ async fn stream_bits_ai_to_acp(
                 let Some(data_str) = line.strip_prefix("data: ") else {
                     continue;
                 };
+
+                // [DONE] marks end of SSE stream
+                if data_str.trim() == "[DONE]" {
+                    if message_started {
+                        write_sse_event(
+                            writer,
+                            "run_completed",
+                            &serde_json::json!({
+                                "type": "run_completed",
+                                "run_id": acp_run_id,
+                                "agent_id": agent_id,
+                                "session_id": &lassie_run_id,
+                                "status": "completed",
+                                "output": [{"role": "assistant", "content": [{"type": "text", "text": &full_text}]}]
+                            }),
+                        )
+                        .await?;
+                    }
+                    return Ok(());
+                }
+
                 let Ok(val) = serde_json::from_str::<serde_json::Value>(data_str) else {
                     continue;
                 };
 
-                // Skip initial system-prompt event (has "prompt" key, no structured_message)
-                let Some(attrs) = val.pointer("/data/attributes") else {
-                    continue;
-                };
-                let Some(sm) = attrs.get("structured_message") else {
-                    continue;
-                };
-
-                // Capture conversation_id for session_id
-                if session_id.is_empty() {
-                    if let Some(cid) = attrs.get("conversation_id").and_then(|v| v.as_str()) {
-                        session_id = cid.to_string();
-                    }
-                }
-
-                // Capture message_id for message_start event
-                if message_id.is_none() {
-                    if let Some(mid) = sm.get("message_id").and_then(|v| v.as_str()) {
-                        message_id = Some(mid.to_string());
-                    }
-                }
-
-                let content = match sm.get("content") {
-                    Some(c) => c,
-                    None => continue,
-                };
-
-                let content_type = content.get("type").and_then(|v| v.as_str()).unwrap_or("");
-
-                // Only emit markdown_fragment content (skip thinking tokens)
-                if content_type != "markdown_fragment" {
-                    continue;
-                }
-
-                let fragment = content
-                    .get("content")
+                let msg_type = val
+                    .get("message_type")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
 
-                // Send message_start before the first chunk
-                if !message_started && !fragment.is_empty() {
-                    message_started = true;
-                    write_sse_event(
-                        writer,
-                        "message_created",
-                        &serde_json::json!({
-                            "type": "message_created",
-                            "run_id": run_id,
-                            "message_id": message_id,
-                            "role": "assistant"
-                        }),
-                    )
-                    .await?;
+                // Capture run_id from any event that carries it
+                if lassie_run_id.is_empty() {
+                    if let Some(rid) = val.get("run_id").and_then(|v| v.as_str()) {
+                        lassie_run_id = rid.to_string();
+                    }
                 }
 
-                if !fragment.is_empty() {
-                    full_text.push_str(fragment);
-                    write_sse_event(
-                        writer,
-                        "message_chunk",
-                        &serde_json::json!({
-                            "type": "message_chunk",
-                            "run_id": run_id,
-                            "delta": {
-                                "role": "assistant",
-                                "content": [{"type": "text", "text": fragment}]
-                            }
-                        }),
-                    )
-                    .await?;
-                }
+                match msg_type {
+                    "assistant_message" => {
+                        let content = val.get("content").and_then(|v| v.as_str()).unwrap_or("");
 
-                // End-of-stream: empty fragment with results.usage present
-                if fragment.is_empty() && sm.get("results").is_some() {
-                    // message_completed
-                    write_sse_event(
-                        writer,
-                        "message_completed",
-                        &serde_json::json!({
-                            "type": "message_completed",
-                            "run_id": run_id,
-                            "message": {
-                                "role": "assistant",
-                                "content": [{"type": "text", "text": &full_text}]
-                            }
-                        }),
-                    )
-                    .await?;
+                        if !message_started {
+                            message_started = true;
+                            write_sse_event(
+                                writer,
+                                "message_created",
+                                &serde_json::json!({
+                                    "type": "message_created",
+                                    "run_id": acp_run_id,
+                                    "message_id": val.get("id").and_then(|v| v.as_str()),
+                                    "role": "assistant"
+                                }),
+                            )
+                            .await?;
+                        }
 
-                    // run_completed
-                    write_sse_event(
-                        writer,
-                        "run_completed",
-                        &serde_json::json!({
-                            "type": "run_completed",
-                            "run_id": run_id,
-                            "agent_id": "bits-ai",
-                            "session_id": &session_id,
-                            "status": "completed",
-                            "output": [{
-                                "role": "assistant",
-                                "content": [{"type": "text", "text": &full_text}]
-                            }]
-                        }),
-                    )
-                    .await?;
+                        if !content.is_empty() {
+                            full_text.push_str(content);
+                            write_sse_event(
+                                writer,
+                                "message_chunk",
+                                &serde_json::json!({
+                                    "type": "message_chunk",
+                                    "run_id": acp_run_id,
+                                    "delta": {
+                                        "role": "assistant",
+                                        "content": [{"type": "text", "text": content}]
+                                    }
+                                }),
+                            )
+                            .await?;
+                        }
+                    }
+                    "stop_reason" => {
+                        let stop = val
+                            .get("stop_reason")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("end_turn");
 
-                    return Ok(());
+                        // Emit message_completed + run_completed on any terminal stop reason
+                        let status = match stop {
+                            "end_turn" | "max_steps" | "max_tokens_exceeded" => "completed",
+                            "cancelled" => "cancelled",
+                            "error" => "error",
+                            _ => "completed",
+                        };
+
+                        if message_started {
+                            write_sse_event(
+                                writer,
+                                "message_completed",
+                                &serde_json::json!({
+                                    "type": "message_completed",
+                                    "run_id": acp_run_id,
+                                    "message": {
+                                        "role": "assistant",
+                                        "content": [{"type": "text", "text": &full_text}]
+                                    }
+                                }),
+                            )
+                            .await?;
+                        }
+
+                        write_sse_event(
+                            writer,
+                            "run_completed",
+                            &serde_json::json!({
+                                "type": "run_completed",
+                                "run_id": acp_run_id,
+                                "agent_id": agent_id,
+                                "session_id": &lassie_run_id,
+                                "status": status,
+                                "output": [{"role": "assistant", "content": [{"type": "text", "text": &full_text}]}]
+                            }),
+                        )
+                        .await?;
+
+                        // Don't return yet — wait for [DONE] to cleanly close
+                    }
+                    // Skip: thinking_chunk, ping, tool_call_message, usage_statistics
+                    _ => {}
                 }
             }
         }
     }
 
-    // Stream ended without a clean end-of-stream marker — still emit completion
+    // Stream closed without [DONE] — emit completion if we got any content
     if message_started {
         write_sse_event(
             writer,
             "run_completed",
             &serde_json::json!({
                 "type": "run_completed",
-                "run_id": run_id,
-                "agent_id": "bits-ai",
-                "session_id": &session_id,
+                "run_id": acp_run_id,
+                "agent_id": agent_id,
+                "session_id": &lassie_run_id,
                 "status": "completed",
-                "output": [{
-                    "role": "assistant",
-                    "content": [{"type": "text", "text": &full_text}]
-                }]
+                "output": [{"role": "assistant", "content": [{"type": "text", "text": &full_text}]}]
             }),
         )
         .await?;
@@ -508,65 +571,45 @@ async fn stream_bits_ai_to_acp(
     Ok(())
 }
 
-/// Reads a Bits AI SSE stream to completion, returning the assembled text and session_id.
-#[cfg(not(target_arch = "wasm32"))]
-async fn collect_markdown_from_stream(resp: reqwest::Response) -> Result<(String, String)> {
-    use futures::StreamExt;
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
-    let mut buffer = String::new();
-    let mut full_text = String::new();
-    let mut session_id = String::new();
-    let mut bytes_stream = resp.bytes_stream();
-
-    while let Some(chunk_result) = bytes_stream.next().await {
-        let chunk = chunk_result.map_err(|e| anyhow::anyhow!("stream read error: {e}"))?;
-        buffer.push_str(&String::from_utf8_lossy(&chunk));
-
-        while let Some(end) = buffer.find("\n\n") {
-            let event_block = buffer[..end].to_string();
-            buffer = buffer[end + 2..].to_string();
-
-            for line in event_block.lines() {
-                let Some(data_str) = line.strip_prefix("data: ") else {
-                    continue;
-                };
-                let Ok(val) = serde_json::from_str::<serde_json::Value>(data_str) else {
-                    continue;
-                };
-
-                let Some(attrs) = val.pointer("/data/attributes") else {
-                    continue;
-                };
-                let Some(sm) = attrs.get("structured_message") else {
-                    continue;
-                };
-
-                if session_id.is_empty() {
-                    if let Some(cid) = attrs.get("conversation_id").and_then(|v| v.as_str()) {
-                        session_id = cid.to_string();
-                    }
+/// Extracts assistant text content from a non-streaming LettaResponse.
+fn extract_lassie_text(val: &serde_json::Value) -> String {
+    let Some(messages) = val.get("messages").and_then(|v| v.as_array()) else {
+        return String::new();
+    };
+    let mut parts = Vec::new();
+    for msg in messages {
+        // Simple format: {"role": "assistant", "content": "..."}
+        if msg.get("role").and_then(|v| v.as_str()) == Some("assistant") {
+            if let Some(content) = msg.get("content").and_then(|v| v.as_str()) {
+                if !content.is_empty() {
+                    parts.push(content.to_string());
                 }
-
-                let Some(content) = sm.get("content") else {
-                    continue;
-                };
-                if content.get("type").and_then(|v| v.as_str()) != Some("markdown_fragment") {
-                    continue;
+            }
+        }
+        // Nested format: {"message_type": "assistant_message", "assistant_message": {"content": "..."}}
+        if msg
+            .get("message_type")
+            .and_then(|v| v.as_str())
+            .is_some_and(|t| t == "assistant_message")
+        {
+            if let Some(content) = msg
+                .pointer("/assistant_message/content")
+                .and_then(|v| v.as_str())
+            {
+                if !content.is_empty() {
+                    parts.push(content.to_string());
                 }
-
-                let fragment = content
-                    .get("content")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                full_text.push_str(fragment);
             }
         }
     }
-
-    Ok((full_text, session_id))
+    parts.join("\n")
 }
 
-/// Extracts the first text content from an ACP input messages array.
+/// Extracts the first user text message from an ACP input array.
 fn extract_acp_message(req: &serde_json::Value) -> Option<String> {
     let input = req.get("input")?.as_array()?;
     for msg in input {
@@ -574,7 +617,6 @@ fn extract_acp_message(req: &serde_json::Value) -> Option<String> {
             continue;
         }
         if let Some(content) = msg.get("content") {
-            // content can be a string or an array of content blocks
             if let Some(s) = content.as_str() {
                 if !s.is_empty() {
                     return Some(s.to_string());
@@ -593,6 +635,24 @@ fn extract_acp_message(req: &serde_json::Value) -> Option<String> {
         }
     }
     None
+}
+
+/// Adds auth headers to a reqwest RequestBuilder.
+fn add_auth(
+    req: reqwest::RequestBuilder,
+    access_token: Option<&str>,
+    api_key: Option<&str>,
+    app_key: Option<&str>,
+) -> Result<reqwest::RequestBuilder> {
+    if let Some(token) = access_token {
+        return Ok(req.header("Authorization", format!("Bearer {token}")));
+    }
+    if let (Some(ak), Some(apk)) = (api_key, app_key) {
+        return Ok(req
+            .header("DD-API-KEY", ak)
+            .header("DD-APPLICATION-KEY", apk));
+    }
+    anyhow::bail!("no authentication configured")
 }
 
 // ---------------------------------------------------------------------------
@@ -649,7 +709,12 @@ fn http_reason(status: u16) -> &'static str {
 // ---------------------------------------------------------------------------
 
 #[cfg(target_arch = "wasm32")]
-pub async fn serve(_cfg: &Config, _port: u16, _host: &str) -> Result<()> {
+pub async fn serve(
+    _cfg: &Config,
+    _port: u16,
+    _host: &str,
+    _agent_id: Option<String>,
+) -> Result<()> {
     anyhow::bail!("acp serve is not supported in WASM")
 }
 
@@ -664,10 +729,7 @@ mod tests {
     #[test]
     fn test_extract_acp_message_text_block() {
         let req = serde_json::json!({
-            "input": [{
-                "role": "user",
-                "content": [{"type": "text", "text": "hello world"}]
-            }]
+            "input": [{"role": "user", "content": [{"type": "text", "text": "hello world"}]}]
         });
         assert_eq!(extract_acp_message(&req), Some("hello world".to_string()));
     }
@@ -675,10 +737,7 @@ mod tests {
     #[test]
     fn test_extract_acp_message_string_content() {
         let req = serde_json::json!({
-            "input": [{
-                "role": "user",
-                "content": "simple string message"
-            }]
+            "input": [{"role": "user", "content": "simple string message"}]
         });
         assert_eq!(
             extract_acp_message(&req),
@@ -690,7 +749,7 @@ mod tests {
     fn test_extract_acp_message_skips_non_user() {
         let req = serde_json::json!({
             "input": [
-                {"role": "system", "content": [{"type": "text", "text": "system prompt"}]},
+                {"role": "system", "content": [{"type": "text", "text": "system"}]},
                 {"role": "user", "content": [{"type": "text", "text": "user msg"}]}
             ]
         });
@@ -701,6 +760,35 @@ mod tests {
     fn test_extract_acp_message_missing_input() {
         let req = serde_json::json!({"agent_id": "bits-ai"});
         assert_eq!(extract_acp_message(&req), None);
+    }
+
+    #[test]
+    fn test_extract_lassie_text_simple_role() {
+        let val = serde_json::json!({
+            "messages": [
+                {"role": "user", "content": "hello"},
+                {"role": "assistant", "content": "world"}
+            ],
+            "stop_reason": "end_turn"
+        });
+        assert_eq!(extract_lassie_text(&val), "world");
+    }
+
+    #[test]
+    fn test_extract_lassie_text_nested() {
+        let val = serde_json::json!({
+            "messages": [{
+                "message_type": "assistant_message",
+                "assistant_message": {"content": "nested content"}
+            }]
+        });
+        assert_eq!(extract_lassie_text(&val), "nested content");
+    }
+
+    #[test]
+    fn test_extract_lassie_text_empty() {
+        let val = serde_json::json!({"messages": []});
+        assert_eq!(extract_lassie_text(&val), "");
     }
 
     #[test]

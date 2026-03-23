@@ -5188,10 +5188,11 @@ enum TracesActions {
 // ---- ACP ----
 #[derive(Subcommand)]
 enum AcpActions {
-    /// Start an ACP server that delegates to Datadog Bits AI
+    /// Start an ACP server that delegates to Datadog lassie-ng
     ///
     /// Spawns a local HTTP server implementing the Agent Communication Protocol (ACP).
-    /// Requests are proxied to the Datadog Bits AI assistant (/api/v2/assistant).
+    /// Requests are proxied to the lassie-ng agent endpoint
+    /// (/api/unstable/lassie-ng/v1/agents/{id}/messages).
     ///
     /// Endpoints served:
     ///   GET  /agent.json       — ACP agent card
@@ -5199,8 +5200,11 @@ enum AcpActions {
     ///   POST /runs/stream      — streaming run (SSE)
     ///
     /// EXAMPLES:
-    ///   # Start on default port 9099
+    ///   # Start on default port 9099 (auto-discovers first agent)
     ///   pup acp serve
+    ///
+    ///   # Start with a specific agent ID
+    ///   pup acp serve --agent-id <uuid>
     ///
     ///   # Start on a custom port
     ///   pup acp serve --port 8080
@@ -5218,6 +5222,11 @@ enum AcpActions {
             help = "Host address to bind to"
         )]
         host: String,
+        #[arg(
+            long,
+            help = "Lassie-ng agent ID to proxy (auto-discovered if omitted)"
+        )]
+        agent_id: Option<String>,
     },
 }
 
@@ -7924,8 +7933,12 @@ async fn main_inner() -> anyhow::Result<()> {
         }
         // --- ACP ---
         Commands::Acp { action } => match action {
-            AcpActions::Serve { port, host } => {
-                commands::acp::serve(&cfg, port, &host).await?;
+            AcpActions::Serve {
+                port,
+                host,
+                agent_id,
+            } => {
+                commands::acp::serve(&cfg, port, &host, agent_id).await?;
             }
         },
         // --- Agent ---
