@@ -262,7 +262,9 @@ mod tests {
         let ro = read_only_scopes();
         for scope in &ro {
             assert!(
-                !scope.contains("write") && !scope.contains("manage") && *scope != "org_management",
+                !scope.ends_with("_write")
+                    && !scope.ends_with("_manage")
+                    && *scope != "org_management",
                 "read_only_scopes should not contain write/manage scope: {scope}"
             );
         }

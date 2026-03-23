@@ -1028,6 +1028,42 @@ enum Commands {
         #[command(subcommand)]
         action: InfraActions,
     },
+    /// Internal Developer Portal — agent-native context layer
+    ///
+    /// Retrieve service context, ownership, health, dependencies, and
+    /// suggested next actions from the Datadog Service Catalog / IDP.
+    ///
+    /// CAPABILITIES:
+    ///   • Get a full context summary for any entity (assist)
+    ///   • Find entities by name or query (find)
+    ///   • Resolve ownership and on-call (owner)
+    ///   • Show upstream/downstream dependencies (deps)
+    ///   • Register a service definition from YAML (register)
+    ///
+    /// EXAMPLES:
+    ///   # Get full context for a service
+    ///   pup idp assist catalog-http
+    ///
+    ///   # Find entities matching a query
+    ///   pup idp find "catalog"
+    ///
+    ///   # Who owns this service?
+    ///   pup idp owner catalog-http
+    ///
+    ///   # Show dependencies
+    ///   pup idp deps catalog-http
+    ///
+    ///   # Register a service definition
+    ///   pup idp register service.datadog.yaml
+    ///
+    /// AUTHENTICATION:
+    ///   Requires either OAuth2 authentication (pup auth login) or API keys
+    ///   (DD_API_KEY and DD_APP_KEY environment variables).
+    #[command(verbatim_doc_comment)]
+    Idp {
+        #[command(subcommand)]
+        action: IdpActions,
+    },
     /// Manage third-party integrations
     ///
     /// Manage third-party integrations with external services.
@@ -1928,6 +1964,48 @@ enum Commands {
         #[command(subcommand)]
         action: WorkflowActions,
     },
+    /// Manage LLM Observability projects, experiments, and datasets
+    ///
+    /// Manage LLM Observability resources for AI/ML application monitoring.
+    ///
+    /// CAPABILITIES:
+    ///   • Create and list LLM Obs projects
+    ///   • Create, list, update, and delete experiments
+    ///   • Create and list datasets within a project
+    ///
+    /// EXAMPLES:
+    ///   pup llm-obs projects list
+    ///   pup llm-obs experiments list
+    ///   pup llm-obs datasets list --project-id=my-project
+    ///
+    /// AUTHENTICATION:
+    ///   Requires either OAuth2 authentication or API keys.
+    #[command(name = "llm-obs", verbatim_doc_comment)]
+    LlmObs {
+        #[command(subcommand)]
+        action: LlmObsActions,
+    },
+    /// Manage reference tables for log enrichment
+    ///
+    /// Reference tables allow you to enrich logs with additional data from
+    /// CSV files stored in cloud storage or uploaded directly.
+    ///
+    /// CAPABILITIES:
+    ///   • List, get, and create reference tables
+    ///   • Batch query rows by primary key
+    ///
+    /// EXAMPLES:
+    ///   pup reference-tables list
+    ///   pup reference-tables get <table-id>
+    ///   pup reference-tables batch-query --file=query.json
+    ///
+    /// AUTHENTICATION:
+    ///   Requires either OAuth2 authentication or API keys.
+    #[command(name = "reference-tables", verbatim_doc_comment)]
+    ReferenceTables {
+        #[command(subcommand)]
+        action: ReferenceTablesActions,
+    },
     /// Print version information
     Version,
 }
@@ -2725,6 +2803,95 @@ enum InfraHostActions {
     },
     /// Get host details
     Get { hostname: String },
+}
+
+// ---- IDP (Internal Developer Portal) ----
+#[derive(Subcommand)]
+enum IdpActions {
+    /// Get full context summary with suggested next actions
+    ///
+    /// The flagship IDP command. Makes parallel API calls to return
+    /// a single unified view of any service entity:
+    ///
+    /// RETURNS:
+    ///   • Entity info (name, kind, description, lifecycle, tier, owner)
+    ///   • Owner team details (handle, name, member count, Slack channels)
+    ///   • Health signals (monitors, incidents, SLOs — pre-computed counts)
+    ///   • Dependencies (upstream/downstream services)
+    ///   • Links (dashboards, repos, runbooks)
+    ///   • Metadata gaps (missing description, lifecycle, tier, runbook, docs)
+    ///   • Suggested next actions (based on current health and gaps)
+    ///
+    /// START HERE — this is the best first command to run for any entity.
+    /// Use the other commands (owner, deps, find) to drill deeper.
+    ///
+    /// EXAMPLES:
+    ///   pup idp assist catalog-http
+    ///   pup idp assist payment-service
+    ///   pup idp assist api-gateway
+    #[command(verbatim_doc_comment)]
+    Assist {
+        /// Entity name (e.g. "catalog-http", "payment-service")
+        entity: String,
+    },
+    /// Find entities by name or query
+    ///
+    /// Search the entity graph for services, resources, or other entities.
+    /// Useful when you don't know the exact entity name.
+    ///
+    /// QUERY SYNTAX:
+    ///   Simple text searches by name. Prefix with kind: to filter by type.
+    ///   Use AND to combine filters.
+    ///
+    /// EXAMPLES:
+    ///   pup idp find "catalog"
+    ///   pup idp find "kind:service AND name:payment"
+    ///   pup idp find "kind:service AND owner:platform"
+    #[command(verbatim_doc_comment)]
+    Find {
+        /// Search query (e.g. "catalog", "kind:service AND name:payment")
+        query: String,
+    },
+    /// Resolve ownership, team details, and on-call context
+    ///
+    /// Returns the owning team, member count, Slack channels,
+    /// and on-call information for routing questions or incidents.
+    ///
+    /// EXAMPLES:
+    ///   pup idp owner catalog-http
+    ///   pup idp owner payment-service
+    #[command(verbatim_doc_comment)]
+    Owner {
+        /// Entity name
+        entity: String,
+    },
+    /// Show upstream and downstream service dependencies
+    ///
+    /// Returns which services depend on this entity (upstream)
+    /// and which services this entity calls (downstream).
+    /// Useful for blast-radius analysis before making changes.
+    ///
+    /// EXAMPLES:
+    ///   pup idp deps catalog-http
+    ///   pup idp deps api-gateway
+    #[command(verbatim_doc_comment)]
+    Deps {
+        /// Entity name
+        entity: String,
+    },
+    /// Register a service definition from a YAML file
+    ///
+    /// POSTs a service.datadog.yaml file to the Datadog Service Catalog API.
+    /// The file should use the v2.2 schema format.
+    ///
+    /// EXAMPLES:
+    ///   pup idp register services/checkout-api/service.datadog.yaml
+    ///   pup idp register ./service.datadog.yaml
+    #[command(verbatim_doc_comment)]
+    Register {
+        /// Path to the service.datadog.yaml file
+        file: String,
+    },
 }
 
 // ---- Audit Logs ----
@@ -4060,6 +4227,20 @@ enum ErrorTrackingIssueActions {
             help = "Sort order: TOTAL_COUNT, FIRST_SEEN, IMPACTED_SESSIONS, PRIORITY"
         )]
         order_by: String,
+        #[arg(
+            long,
+            conflicts_with = "persona",
+            required_unless_present = "persona",
+            help = "Error source track: trace, logs, or rum"
+        )]
+        track: Option<String>,
+        #[arg(
+            long,
+            conflicts_with = "track",
+            required_unless_present = "track",
+            help = "Client persona filter: ALL, BROWSER, MOBILE, or BACKEND"
+        )]
+        persona: Option<String>,
     },
     /// Get issue details
     Get { issue_id: String },
@@ -4473,6 +4654,45 @@ enum CostActions {
         #[arg(long, help = "Tag keys for breakdown (required)")]
         fields: Option<String>,
     },
+    /// Manage AWS CUR cloud cost configs
+    #[command(name = "aws-config")]
+    AwsConfig {
+        #[command(subcommand)]
+        action: CostCloudConfigActions,
+    },
+    /// Manage Azure UC cloud cost configs
+    #[command(name = "azure-config")]
+    AzureConfig {
+        #[command(subcommand)]
+        action: CostCloudConfigActions,
+    },
+    /// Manage GCP usage cost configs
+    #[command(name = "gcp-config")]
+    GcpConfig {
+        #[command(subcommand)]
+        action: CostCloudConfigActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum CostCloudConfigActions {
+    /// List cloud cost configs
+    List,
+    /// Get a specific cloud cost config by ID
+    Get {
+        #[arg(help = "Cloud account ID")]
+        id: i64,
+    },
+    /// Create a cloud cost config from a JSON file
+    Create {
+        #[arg(long, help = "JSON file with config body (required)")]
+        file: String,
+    },
+    /// Delete a cloud cost config by ID
+    Delete {
+        #[arg(help = "Cloud account ID")]
+        id: i64,
+    },
 }
 
 // ---- Misc ----
@@ -4727,13 +4947,142 @@ enum NetworkInterfaceTagActions {
     },
 }
 
-// ---- Obs Pipelines (placeholder) ----
+// ---- Obs Pipelines ----
 #[derive(Subcommand)]
 enum ObsPipelinesActions {
     /// List observability pipelines
-    List,
+    List {
+        #[arg(
+            long,
+            default_value = "50",
+            help = "Maximum number of pipelines to return"
+        )]
+        limit: i64,
+    },
     /// Get pipeline details
     Get { pipeline_id: String },
+    /// Create a new pipeline from a JSON file
+    Create {
+        #[arg(long, help = "JSON file with pipeline spec body (required)")]
+        file: String,
+    },
+    /// Update an existing pipeline from a JSON file
+    Update {
+        pipeline_id: String,
+        #[arg(long, help = "JSON file with pipeline body (required)")]
+        file: String,
+    },
+    /// Delete a pipeline
+    Delete { pipeline_id: String },
+    /// Validate a pipeline configuration without creating it
+    Validate {
+        #[arg(long, help = "JSON file with pipeline spec body (required)")]
+        file: String,
+    },
+}
+
+// ---- LLM Observability ----
+#[derive(Subcommand)]
+enum LlmObsActions {
+    /// Manage LLM Observability projects
+    Projects {
+        #[command(subcommand)]
+        action: LlmObsProjectsActions,
+    },
+    /// Manage LLM Observability experiments
+    Experiments {
+        #[command(subcommand)]
+        action: LlmObsExperimentsActions,
+    },
+    /// Manage LLM Observability datasets
+    Datasets {
+        #[command(subcommand)]
+        action: LlmObsDatasetsActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum LlmObsProjectsActions {
+    /// Create a new LLM Obs project
+    Create {
+        #[arg(long, help = "JSON file with project body (required)")]
+        file: String,
+    },
+    /// List LLM Obs projects
+    List,
+}
+
+#[derive(Subcommand)]
+enum LlmObsExperimentsActions {
+    /// Create a new LLM Obs experiment
+    Create {
+        #[arg(long, help = "JSON file with experiment body (required)")]
+        file: String,
+    },
+    /// List LLM Obs experiments
+    List {
+        #[arg(long, help = "Filter by project ID")]
+        filter_project_id: Option<String>,
+        #[arg(long, help = "Filter by dataset ID")]
+        filter_dataset_id: Option<String>,
+    },
+    /// Update an existing LLM Obs experiment
+    Update {
+        experiment_id: String,
+        #[arg(long, help = "JSON file with experiment update body (required)")]
+        file: String,
+    },
+    /// Delete LLM Obs experiments (provide IDs in a JSON file)
+    Delete {
+        #[arg(long, help = "JSON file with experiment IDs to delete (required)")]
+        file: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum LlmObsDatasetsActions {
+    /// Create a new LLM Obs dataset
+    Create {
+        #[arg(long, help = "Project ID (required)")]
+        project_id: String,
+        #[arg(long, help = "JSON file with dataset body (required)")]
+        file: String,
+    },
+    /// List LLM Obs datasets for a project
+    List {
+        #[arg(long, help = "Project ID (required)")]
+        project_id: String,
+    },
+}
+
+// ---- Reference Tables ----
+#[derive(Subcommand)]
+enum ReferenceTablesActions {
+    /// List reference tables
+    List {
+        #[arg(
+            long,
+            default_value = "50",
+            help = "Maximum number of tables to return"
+        )]
+        limit: i64,
+    },
+    /// Get a reference table by ID
+    Get {
+        #[arg(help = "Table ID")]
+        table_id: String,
+    },
+    /// Create a reference table from a JSON file
+    Create {
+        #[arg(long, help = "JSON file with table body (required)")]
+        file: String,
+    },
+    /// Batch query reference table rows by primary key
+    #[command(name = "batch-query")]
+    BatchQuery {
+        #[arg(long, help = "JSON file with batch query body (required)")]
+        file: String,
+    },
 }
 
 // ---- Scorecards (placeholder) ----
@@ -5737,6 +6086,24 @@ async fn main_inner() -> anyhow::Result<()> {
 
     let matches = Cli::command().get_matches();
     let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+
+    // Handle commands that do not require authentication before Config::from_env() so
+    // that sourcing completions in a shell rc (e.g. `source <(pup completions bash)`)
+    // never triggers a token refresh or prints auth-related messages.
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Commands::Completions { shell, install } = cli.command {
+        if install {
+            commands::completions::install(shell)?;
+        } else {
+            commands::completions::generate(shell);
+        }
+        return Ok(());
+    }
+    if let Commands::Version = cli.command {
+        println!("{}", version::build_info());
+        return Ok(());
+    }
+
     let mut cfg = config::Config::from_env()?;
 
     // Apply flag overrides
@@ -6206,6 +6573,27 @@ async fn main_inner() -> anyhow::Result<()> {
                         commands::infrastructure::hosts_get(&cfg, &hostname).await?;
                     }
                 },
+            }
+        }
+        // --- IDP (Internal Developer Portal) ---
+        Commands::Idp { action } => {
+            cfg.validate_auth()?;
+            match action {
+                IdpActions::Assist { entity } => {
+                    commands::idp::assist(&cfg, &entity).await?;
+                }
+                IdpActions::Find { query } => {
+                    commands::idp::find(&cfg, &query).await?;
+                }
+                IdpActions::Owner { entity } => {
+                    commands::idp::owner(&cfg, &entity).await?;
+                }
+                IdpActions::Deps { entity } => {
+                    commands::idp::deps(&cfg, &entity).await?;
+                }
+                IdpActions::Register { file } => {
+                    commands::idp::register(&cfg, &file).await?;
+                }
             }
         }
         // --- Audit Logs ---
@@ -6948,8 +7336,15 @@ async fn main_inner() -> anyhow::Result<()> {
             cfg.validate_auth()?;
             match action {
                 ErrorTrackingActions::Issues { action } => match action {
-                    ErrorTrackingIssueActions::Search { query, limit, .. } => {
-                        commands::error_tracking::issues_search(&cfg, query, limit).await?;
+                    ErrorTrackingIssueActions::Search {
+                        query,
+                        limit,
+                        track,
+                        persona,
+                        ..
+                    } => {
+                        commands::error_tracking::issues_search(&cfg, query, limit, track, persona)
+                            .await?;
                     }
                     ErrorTrackingIssueActions::Get { issue_id } => {
                         commands::error_tracking::issues_get(&cfg, &issue_id).await?;
@@ -7273,6 +7668,44 @@ async fn main_inner() -> anyhow::Result<()> {
                 CostActions::Attribution { start, fields, .. } => {
                     commands::cost::attribution(&cfg, start, fields).await?;
                 }
+                CostActions::AwsConfig { action } => match action {
+                    CostCloudConfigActions::List => commands::cost::aws_config_list(&cfg).await?,
+                    CostCloudConfigActions::Get { id } => {
+                        commands::cost::aws_config_get(&cfg, id).await?;
+                    }
+                    CostCloudConfigActions::Create { file } => {
+                        commands::cost::aws_config_create(&cfg, &file).await?;
+                    }
+                    CostCloudConfigActions::Delete { id } => {
+                        commands::cost::aws_config_delete(&cfg, id).await?;
+                    }
+                },
+                CostActions::AzureConfig { action } => match action {
+                    CostCloudConfigActions::List => {
+                        commands::cost::azure_config_list(&cfg).await?;
+                    }
+                    CostCloudConfigActions::Get { id } => {
+                        commands::cost::azure_config_get(&cfg, id).await?;
+                    }
+                    CostCloudConfigActions::Create { file } => {
+                        commands::cost::azure_config_create(&cfg, &file).await?;
+                    }
+                    CostCloudConfigActions::Delete { id } => {
+                        commands::cost::azure_config_delete(&cfg, id).await?;
+                    }
+                },
+                CostActions::GcpConfig { action } => match action {
+                    CostCloudConfigActions::List => commands::cost::gcp_config_list(&cfg).await?,
+                    CostCloudConfigActions::Get { id } => {
+                        commands::cost::gcp_config_get(&cfg, id).await?;
+                    }
+                    CostCloudConfigActions::Create { file } => {
+                        commands::cost::gcp_config_create(&cfg, &file).await?;
+                    }
+                    CostCloudConfigActions::Delete { id } => {
+                        commands::cost::gcp_config_delete(&cfg, id).await?;
+                    }
+                },
             }
         }
         // --- Misc ---
@@ -7434,13 +7867,30 @@ async fn main_inner() -> anyhow::Result<()> {
                 }
             }
         },
-        // --- Obs Pipelines (placeholder) ---
-        Commands::ObsPipelines { action } => match action {
-            ObsPipelinesActions::List => commands::obs_pipelines::list()?,
-            ObsPipelinesActions::Get { pipeline_id } => {
-                commands::obs_pipelines::get(&pipeline_id)?;
+        // --- Obs Pipelines ---
+        Commands::ObsPipelines { action } => {
+            cfg.validate_auth()?;
+            match action {
+                ObsPipelinesActions::List { limit } => {
+                    commands::obs_pipelines::list(&cfg, limit).await?;
+                }
+                ObsPipelinesActions::Get { pipeline_id } => {
+                    commands::obs_pipelines::get(&cfg, &pipeline_id).await?;
+                }
+                ObsPipelinesActions::Create { file } => {
+                    commands::obs_pipelines::create(&cfg, &file).await?;
+                }
+                ObsPipelinesActions::Update { pipeline_id, file } => {
+                    commands::obs_pipelines::update(&cfg, &pipeline_id, &file).await?;
+                }
+                ObsPipelinesActions::Delete { pipeline_id } => {
+                    commands::obs_pipelines::delete(&cfg, &pipeline_id).await?;
+                }
+                ObsPipelinesActions::Validate { file } => {
+                    commands::obs_pipelines::validate(&cfg, &file).await?;
+                }
             }
-        },
+        }
         // --- Scorecards (placeholder) ---
         Commands::Scorecards { action } => match action {
             ScorecardsActions::List => commands::scorecards::list()?,
@@ -7650,6 +8100,71 @@ async fn main_inner() -> anyhow::Result<()> {
                             .await?;
                     }
                 },
+            }
+        }
+        // --- LLM Observability ---
+        Commands::LlmObs { action } => {
+            cfg.validate_auth()?;
+            match action {
+                LlmObsActions::Projects { action } => match action {
+                    LlmObsProjectsActions::Create { file } => {
+                        commands::llm_obs::projects_create(&cfg, &file).await?;
+                    }
+                    LlmObsProjectsActions::List => {
+                        commands::llm_obs::projects_list(&cfg).await?;
+                    }
+                },
+                LlmObsActions::Experiments { action } => match action {
+                    LlmObsExperimentsActions::Create { file } => {
+                        commands::llm_obs::experiments_create(&cfg, &file).await?;
+                    }
+                    LlmObsExperimentsActions::List {
+                        filter_project_id,
+                        filter_dataset_id,
+                    } => {
+                        commands::llm_obs::experiments_list(
+                            &cfg,
+                            filter_project_id,
+                            filter_dataset_id,
+                        )
+                        .await?;
+                    }
+                    LlmObsExperimentsActions::Update {
+                        experiment_id,
+                        file,
+                    } => {
+                        commands::llm_obs::experiments_update(&cfg, &experiment_id, &file).await?;
+                    }
+                    LlmObsExperimentsActions::Delete { file } => {
+                        commands::llm_obs::experiments_delete(&cfg, &file).await?;
+                    }
+                },
+                LlmObsActions::Datasets { action } => match action {
+                    LlmObsDatasetsActions::Create { project_id, file } => {
+                        commands::llm_obs::datasets_create(&cfg, &project_id, &file).await?;
+                    }
+                    LlmObsDatasetsActions::List { project_id } => {
+                        commands::llm_obs::datasets_list(&cfg, &project_id).await?;
+                    }
+                },
+            }
+        }
+        // --- Reference Tables ---
+        Commands::ReferenceTables { action } => {
+            cfg.validate_auth()?;
+            match action {
+                ReferenceTablesActions::List { limit } => {
+                    commands::reference_tables::list(&cfg, limit).await?;
+                }
+                ReferenceTablesActions::Get { table_id } => {
+                    commands::reference_tables::get(&cfg, &table_id).await?;
+                }
+                ReferenceTablesActions::Create { file } => {
+                    commands::reference_tables::create(&cfg, &file).await?;
+                }
+                ReferenceTablesActions::BatchQuery { file } => {
+                    commands::reference_tables::batch_query(&cfg, &file).await?;
+                }
             }
         }
         // --- Utility ---
