@@ -66,7 +66,7 @@ browser = [
 [dependencies]
 # CLI (optional — not needed for browser WASM library)
 clap = { version = "4", features = ["derive"], optional = true }
-clap_complete = { version = "4.5.66", optional = true }
+clap_complete = { version = "4", optional = true }
 
 # Async runtime (features selected by native/wasi feature flags)
 tokio = { version = "1", default-features = false }
@@ -74,7 +74,7 @@ tokio = { version = "1", default-features = false }
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
-serde_yaml = "0.9"
+serde_yml = "0.0.12"
 
 # HTTP (version-matched to DD client for native; used directly for WASI/browser)
 reqwest = { version = "0.11", features = ["json", "stream"] }
@@ -107,9 +107,9 @@ aes-gcm = { version = "0.10", optional = true }
 # ---- Native-only dependencies ----
 
 # Synthetics tunnel
-tokio-tungstenite = { version = "0.28", features = ["native-tls"], optional = true }
+tokio-tungstenite = { version = "0.29", features = ["native-tls"], optional = true }
 yamux = { version = "0.13", optional = true }
-russh = { version = "0.57", optional = true }
+russh = { version = "0.58", optional = true }
 ssh-key = { version = "0.6", features = ["p256", "std"], optional = true }
 futures = { version = "0.3", optional = true }
 tokio-util = { version = "0.7", features = ["compat", "io"], optional = true }
