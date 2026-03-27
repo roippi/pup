@@ -65,8 +65,7 @@ pub async fn list(
     if let Some(v) = page_size {
         query.push(("page[size]", v.to_string()));
     }
-    let pairs: Vec<(&str, &str)> = query.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    let data = crate::api::get(cfg, "/api/v2/containers", &pairs).await?;
+    let data = crate::api::get(cfg, "/api/v2/containers", &query).await?;
     crate::formatter::output(cfg, &data)
 }
 
@@ -124,7 +123,6 @@ pub async fn images_list(
     if let Some(v) = page_size {
         query.push(("page[size]", v.to_string()));
     }
-    let pairs: Vec<(&str, &str)> = query.iter().map(|(k, v)| (*k, v.as_str())).collect();
-    let data = crate::api::get(cfg, "/api/v2/container_images", &pairs).await?;
+    let data = crate::api::get(cfg, "/api/v2/container_images", &query).await?;
     crate::formatter::output(cfg, &data)
 }
