@@ -19,6 +19,7 @@ pup <domain> <subgroup> <action> [options] # Nested commands
 
 | Domain | Subcommands | File | Status |
 |--------|-------------|------|--------|
+| acp | serve | src/commands/acp.rs | ✅ |
 | auth | login, logout, status, refresh | src/commands/auth.rs | ✅ |
 | metrics | query, list, get, search | src/commands/metrics.rs | ✅ |
 | logs | search, list, aggregate | src/commands/logs.rs | ✅ |
@@ -45,15 +46,17 @@ pup <domain> <subgroup> <action> [options] # Nested commands
 | security | rules, signals, findings, content-packs, risk-scores | src/commands/security.rs | ✅ |
 | organizations | get, list | src/commands/organizations.rs | ✅ |
 | service-catalog | list, get | src/commands/service_catalog.rs | ✅ |
+| idp | assist, find, owner, deps, register | src/commands/idp.rs | ✅ |
 | error-tracking | issues (search, get) | src/commands/error_tracking.rs | ✅ |
 | scorecards | list, get | src/commands/scorecards.rs | ✅ |
 | usage | summary, hourly | src/commands/usage.rs | ✅ |
-| apm | services (list, stats, operations, resources), entities (list), dependencies (list), flow-map | src/commands/apm.rs | ✅ |
+| apm | services (list, stats, operations, resources), entities (list), dependencies (list), flow-map, troubleshooting (list) | src/commands/apm.rs | ✅ |
+| containers | list, images (list) | src/commands/containers.rs | ✅ |
 | cost | projected, attribution, by-org, aws-config (list, get, create, delete), azure-config (list, get, create, delete), gcp-config (list, get, create, delete) | src/commands/cost.rs | ✅ |
 | product-analytics | events send | src/commands/product_analytics.rs | ✅ |
 | data-governance | scanner-rules (list) | src/commands/data_governance.rs | ✅ |
 | obs-pipelines | list, get, create, update, delete, validate | src/commands/obs_pipelines.rs | ✅ |
-| llm-obs | projects (create, list), experiments (create, list, update, delete), datasets (create, list) | src/commands/llm_obs.rs | ✅ |
+| llm-obs | projects (create, list), experiments (create, list, update, delete, summary, events (list, get), metric-values, dimension-values), datasets (create, list), spans (search) | src/commands/llm_obs.rs | ✅ |
 | reference-tables | list, get, create, batch-query | src/commands/reference_tables.rs | ✅ |
 | network | flows list, devices (list, get, interfaces, tags), interfaces (list, update) | src/commands/network.rs | ✅ |
 | cloud | aws, gcp, azure, oci | src/commands/cloud.rs | ✅ |
@@ -70,7 +73,7 @@ pup <domain> <subgroup> <action> [options] # Nested commands
 | change-requests | create, get, update, create-branch, decisions (update, delete) | src/commands/change_management.rs | ✅ |
 | app-builder | list, get, create, update, delete, delete-batch, publish, unpublish | src/commands/app_builder.rs | ✅ |
 
-**Summary:** 49 working, 0 API-blocked, 0 placeholders
+**Summary:** 52 working, 0 API-blocked, 0 placeholders
 
 **Note:** RUM command is fully operational. Apps and sessions work completely. Metrics and retention-filters support list/get operations (create/update/delete operations pending due to complex API type structures).
 
@@ -157,6 +160,7 @@ pup infrastructure hosts list
 - **error-tracking** - Error management (issues search, issues get)
 - **scorecards** - Service quality (list, get)
 - **service-catalog** - Service registry (list, get)
+- **idp** - Service Catalog agent access (assist, find, owner, deps, register)
 
 ### Operations & Incident Response
 - **incidents** - Incident management (list, get, attachments, settings, handles, postmortem-templates)
@@ -180,7 +184,7 @@ pup infrastructure hosts list
 
 ### Configuration & Data Management
 - **obs-pipelines** - Observability pipelines (list, get, create, update, delete, validate)
-- **llm-obs** - LLM Observability (projects, experiments, datasets)
+- **llm-obs** - LLM Observability (projects, experiments, datasets, spans)
 - **reference-tables** - Reference tables for log enrichment (list, get, create, batch-query)
 - **misc** - Miscellaneous (ip-ranges, status)
 - **product-analytics** - Product analytics events (send, query scalar/timeseries)
@@ -201,9 +205,28 @@ Available on all commands:
 
 ## Recent Enhancements
 
+### v0.34.1 — ACP Server (Datadog AI Agent Integration)
+
+- ✅ **acp** (new) — Local ACP + OpenAI-compatible server that proxies to Datadog Bits AI
+  - `serve` — Start the server (default port 9099)
+  - `serve --agent-id <uuid>` — Target a specific Datadog Bits AI agent (auto-discovers if omitted)
+  - `serve --port 8080 --host 0.0.0.0` — Custom bind address
+  - Implements [Agent Communication Protocol (ACP)](https://agentcommunicationprotocol.dev/) at `POST /runs` and `POST /runs/stream`
+  - Also exposes OpenAI-compatible `POST /chat/completions` and `GET /models` for tools like [opencode](https://opencode.ai)
+  - Requires OAuth2 (`pup auth login`) with `notebooks_read` + `notebooks_write` scopes
+
+### v0.33.4 — IDP Commands for Service Catalog
+
+- ✅ **idp** (new) — Agent-native access to the Datadog Service Catalog
+  - `assist <entity>` — full context: owner, on-call, health, dependencies, metadata gaps, and suggested next actions
+  - `find <query>` — search entities by name (defaults to `kind:service`)
+  - `owner <entity>` — ownership + on-call responders for an entity
+  - `deps <entity>` — upstream/downstream service dependencies
+  - `register <file>` — POST a `service.datadog.yaml` to the Service Definitions API
+
 ### v0.28.0 — New Command Groups and Full Pipeline Implementation
 
-- ✅ **llm-obs** (new) — LLM Observability: projects (create, list), experiments (create, list, update, delete), datasets (create, list)
+- ✅ **llm-obs** (new) — LLM Observability: projects (create, list), experiments (create, list, update, delete, summary, events (list, get), metric-values, dimension-values), datasets (create, list), spans (search)
 - ✅ **reference-tables** (new) — Reference table management (list, get, create, batch-query)
 - ✅ **obs-pipelines** (upgraded from placeholder) — Full CRUD: list, get, create, update, delete, validate
 - **cost** — Added cloud cost configs: `aws-config`, `azure-config`, `gcp-config` (list, get, create, delete each)

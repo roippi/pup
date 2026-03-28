@@ -57,6 +57,35 @@ pub(crate) struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Start a local ACP server that proxies to Datadog Bits AI
+    ///
+    /// Spawns an HTTP server implementing the Agent Communication Protocol (ACP).
+    /// ACP clients (AI agents, coding assistants) can connect and ask questions
+    /// about your Datadog environment. Requests are forwarded to the Bits AI
+    /// assistant and streamed back via ACP's SSE protocol.
+    ///
+    /// COMMANDS:
+    ///   serve     Start the ACP server (default port 9099)
+    ///
+    /// EXAMPLES:
+    ///   # Start on default port
+    ///   pup acp serve
+    ///
+    ///   # Start on a custom port
+    ///   pup acp serve --port 8080
+    ///
+    ///   # Start bound to all interfaces
+    ///   pup acp serve --host 0.0.0.0
+    ///
+    /// AUTHENTICATION:
+    ///   Requires OAuth2 (via 'pup auth login') or DD_API_KEY + DD_APP_KEY.
+    ///
+    /// ACP SPEC: https://agentcommunicationprotocol.dev/
+    #[command(verbatim_doc_comment)]
+    Acp {
+        #[command(subcommand)]
+        action: AcpActions,
+    },
     /// Schema and guide for the datadog-agent daemon and AI coding assistants
     ///
     /// This command group covers two distinct purposes:
@@ -636,6 +665,31 @@ enum Commands {
         #[arg(long)]
         install: bool,
     },
+    /// Query running containers and container images
+    ///
+    /// List and filter containers and container images monitored by Datadog.
+    ///
+    /// CAPABILITIES:
+    ///   • List running containers with filtering and grouping
+    ///   • List container images with filtering and grouping
+    ///
+    /// EXAMPLES:
+    ///   # List all containers
+    ///   pup containers list
+    ///
+    ///   # List containers filtered by tag
+    ///   pup containers list --filter-tags="env:production"
+    ///
+    ///   # List container images
+    ///   pup containers images list
+    ///
+    /// AUTHENTICATION:
+    ///   Requires OAuth2 (via 'pup auth login') or valid API + Application keys.
+    #[command(verbatim_doc_comment)]
+    Containers {
+        #[command(subcommand)]
+        action: ContainerActions,
+    },
     /// Manage cost and billing data
     ///
     /// Query cost management and billing information.
@@ -1007,6 +1061,42 @@ enum Commands {
         #[command(subcommand)]
         action: InfraActions,
     },
+    /// Internal Developer Portal — agent-native context layer
+    ///
+    /// Retrieve service context, ownership, health, dependencies, and
+    /// suggested next actions from the Datadog Service Catalog / IDP.
+    ///
+    /// CAPABILITIES:
+    ///   • Get a full context summary for any entity (assist)
+    ///   • Find entities by name or query (find)
+    ///   • Resolve ownership and on-call (owner)
+    ///   • Show upstream/downstream dependencies (deps)
+    ///   • Register a service definition from YAML (register)
+    ///
+    /// EXAMPLES:
+    ///   # Get full context for a service
+    ///   pup idp assist catalog-http
+    ///
+    ///   # Find entities matching a query
+    ///   pup idp find "catalog"
+    ///
+    ///   # Who owns this service?
+    ///   pup idp owner catalog-http
+    ///
+    ///   # Show dependencies
+    ///   pup idp deps catalog-http
+    ///
+    ///   # Register a service definition
+    ///   pup idp register service.datadog.yaml
+    ///
+    /// AUTHENTICATION:
+    ///   Requires either OAuth2 authentication (pup auth login) or API keys
+    ///   (DD_API_KEY and DD_APP_KEY environment variables).
+    #[command(verbatim_doc_comment)]
+    Idp {
+        #[command(subcommand)]
+        action: IdpActions,
+    },
     /// Manage third-party integrations
     ///
     /// Manage third-party integrations with external services.
@@ -1124,6 +1214,12 @@ enum Commands {
     ///
     ///   # Aggregate logs by status
     ///   pup logs aggregate --query="*" --compute="count" --group-by="status"
+    ///
+    ///   # Multiple computes in one query (comma-separated)
+    ///   pup logs aggregate --query="*" --compute="count,avg(@duration),percentile(@duration, 95)"
+    ///
+    ///   # Multiple group-by dimensions (comma-separated)
+    ///   pup logs aggregate --query="*" --compute="count" --group-by="service,status"
     ///
     ///   # List log archives
     ///   pup logs archives list
@@ -2080,11 +2176,18 @@ enum LogActions {
         from: String,
         #[arg(long, default_value = "now", help = "End time")]
         to: String,
-        #[arg(long, default_value = "count", help = "Metric to compute")]
+        #[arg(
+            long,
+            default_value = "count",
+            help = "Metrics to compute (comma-separated, e.g. count,avg(@duration),percentile(@duration, 95))"
+        )]
         compute: String,
-        #[arg(long, help = "Field to group by")]
+        #[arg(
+            long,
+            help = "Fields to group by (comma-separated, e.g. service,status)"
+        )]
         group_by: Option<String>,
-        #[arg(long, default_value_t = 10, help = "Maximum groups")]
+        #[arg(long, default_value_t = 10, help = "Maximum groups per facet")]
         limit: i32,
         #[arg(long, help = "Storage tier: indexes, online-archives, or flex")]
         storage: Option<String>,
@@ -2613,6 +2716,12 @@ enum DdsqlActions {
         to: String,
         #[arg(long, help = "Aggregation interval in milliseconds (default: 60000)")]
         interval: Option<i64>,
+        #[arg(
+            long,
+            default_value_t = 5000,
+            help = "Maximum number of rows to return"
+        )]
+        limit: i32,
     },
 }
 
@@ -2746,6 +2855,95 @@ enum InfraHostActions {
     },
     /// Get host details
     Get { hostname: String },
+}
+
+// ---- IDP (Internal Developer Portal) ----
+#[derive(Subcommand)]
+enum IdpActions {
+    /// Get full context summary with suggested next actions
+    ///
+    /// The flagship IDP command. Makes parallel API calls to return
+    /// a single unified view of any service entity:
+    ///
+    /// RETURNS:
+    ///   • Entity info (name, kind, description, lifecycle, tier, owner)
+    ///   • Owner team details (handle, name, member count, Slack channels)
+    ///   • Health signals (monitors, incidents, SLOs — pre-computed counts)
+    ///   • Dependencies (upstream/downstream services)
+    ///   • Links (dashboards, repos, runbooks)
+    ///   • Metadata gaps (missing description, lifecycle, tier, runbook, docs)
+    ///   • Suggested next actions (based on current health and gaps)
+    ///
+    /// START HERE — this is the best first command to run for any entity.
+    /// Use the other commands (owner, deps, find) to drill deeper.
+    ///
+    /// EXAMPLES:
+    ///   pup idp assist catalog-http
+    ///   pup idp assist payment-service
+    ///   pup idp assist api-gateway
+    #[command(verbatim_doc_comment)]
+    Assist {
+        /// Entity name (e.g. "catalog-http", "payment-service")
+        entity: String,
+    },
+    /// Find entities by name or query
+    ///
+    /// Search the entity graph for services, resources, or other entities.
+    /// Useful when you don't know the exact entity name.
+    ///
+    /// QUERY SYNTAX:
+    ///   Simple text searches by name. Prefix with kind: to filter by type.
+    ///   Use AND to combine filters.
+    ///
+    /// EXAMPLES:
+    ///   pup idp find "catalog"
+    ///   pup idp find "kind:service AND name:payment"
+    ///   pup idp find "kind:service AND owner:platform"
+    #[command(verbatim_doc_comment)]
+    Find {
+        /// Search query (e.g. "catalog", "kind:service AND name:payment")
+        query: String,
+    },
+    /// Resolve ownership, team details, and on-call context
+    ///
+    /// Returns the owning team, member count, Slack channels,
+    /// and on-call information for routing questions or incidents.
+    ///
+    /// EXAMPLES:
+    ///   pup idp owner catalog-http
+    ///   pup idp owner payment-service
+    #[command(verbatim_doc_comment)]
+    Owner {
+        /// Entity name
+        entity: String,
+    },
+    /// Show upstream and downstream service dependencies
+    ///
+    /// Returns which services depend on this entity (upstream)
+    /// and which services this entity calls (downstream).
+    /// Useful for blast-radius analysis before making changes.
+    ///
+    /// EXAMPLES:
+    ///   pup idp deps catalog-http
+    ///   pup idp deps api-gateway
+    #[command(verbatim_doc_comment)]
+    Deps {
+        /// Entity name
+        entity: String,
+    },
+    /// Register a service definition from a YAML file
+    ///
+    /// POSTs a service.datadog.yaml file to the Datadog Service Catalog API.
+    /// The file should use the v2.2 schema format.
+    ///
+    /// EXAMPLES:
+    ///   pup idp register services/checkout-api/service.datadog.yaml
+    ///   pup idp register ./service.datadog.yaml
+    #[command(verbatim_doc_comment)]
+    Register {
+        /// Path to the service.datadog.yaml file
+        file: String,
+    },
 }
 
 // ---- Audit Logs ----
@@ -3971,6 +4169,11 @@ enum FleetAgentActions {
     List {
         #[arg(long)]
         page_size: Option<i64>,
+        #[arg(
+            long,
+            help = "Filter query (e.g. ip_address:1.2.3.4, hostname:my-host)"
+        )]
+        filter: Option<String>,
     },
     /// Get fleet agent details
     Get { agent_key: String },
@@ -4480,6 +4683,50 @@ enum WebhooksActions {
     List,
 }
 
+// ---- Containers ----
+#[derive(Subcommand)]
+enum ContainerActions {
+    /// List running containers
+    List {
+        /// Comma-separated list of tags to filter containers by
+        #[arg(long)]
+        filter_tags: Option<String>,
+        /// Comma-separated list of tags to group containers by
+        #[arg(long)]
+        group_by: Option<String>,
+        /// Attribute to sort containers by
+        #[arg(long)]
+        sort: Option<String>,
+        /// Maximum number of results returned
+        #[arg(long)]
+        page_size: Option<i32>,
+    },
+    /// Manage container images
+    Images {
+        #[command(subcommand)]
+        action: ContainerImageActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum ContainerImageActions {
+    /// List container images
+    List {
+        /// Comma-separated list of tags to filter container images by
+        #[arg(long)]
+        filter_tags: Option<String>,
+        /// Comma-separated list of tags to group container images by
+        #[arg(long)]
+        group_by: Option<String>,
+        /// Attribute to sort container images by
+        #[arg(long)]
+        sort: Option<String>,
+        /// Maximum number of results returned
+        #[arg(long)]
+        page_size: Option<i32>,
+    },
+}
+
 // ---- Cost ----
 #[derive(Subcommand)]
 enum CostActions {
@@ -4591,6 +4838,11 @@ enum ApmActions {
         #[arg(long, help = "Environment filter")]
         env: Option<String>,
     },
+    /// Troubleshoot APM instrumentation issues
+    Troubleshooting {
+        #[command(subcommand)]
+        action: ApmTroubleshootingActions,
+    },
 }
 
 #[derive(Subcommand)]
@@ -4686,6 +4938,17 @@ enum ApmDependencyActions {
         to: String,
         #[arg(long, help = "Primary tag (group:value)")]
         primary_tag: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum ApmTroubleshootingActions {
+    /// List instrumentation errors for a host
+    List {
+        #[arg(long, help = "Hostname to query (required)")]
+        hostname: String,
+        #[arg(long, help = "Time window (e.g. 4h, 24h, 1h30m)")]
+        timeframe: Option<String>,
     },
 }
 
@@ -4853,6 +5116,11 @@ enum LlmObsActions {
         #[command(subcommand)]
         action: LlmObsDatasetsActions,
     },
+    /// Search LLM Observability spans
+    Spans {
+        #[command(subcommand)]
+        action: LlmObsSpansActions,
+    },
 }
 
 #[derive(Subcommand)]
@@ -4890,6 +5158,93 @@ enum LlmObsExperimentsActions {
     Delete {
         #[arg(long, help = "JSON file with experiment IDs to delete (required)")]
         file: String,
+    },
+    /// Get a summary of an experiment (event counts, metrics, available dimensions)
+    Summary { experiment_id: String },
+    /// Query events from an experiment with optional filtering and sorting
+    Events {
+        #[command(subcommand)]
+        action: LlmObsExperimentsEventsActions,
+    },
+    /// Get metric stats for an experiment, optionally segmented by a dimension
+    #[command(name = "metric-values")]
+    MetricValues {
+        experiment_id: String,
+        #[arg(long, help = "Metric label to query (required)")]
+        metric_label: String,
+        #[arg(long, help = "Dimension to segment results by")]
+        segment_by_dimension: Option<String>,
+        #[arg(long, help = "Filter to a specific dimension value")]
+        segment_dimension_value: Option<String>,
+    },
+    /// Get unique values for a dimension across experiment events
+    #[command(name = "dimension-values")]
+    DimensionValues {
+        experiment_id: String,
+        #[arg(long, help = "Dimension key to enumerate values for (required)")]
+        dimension_key: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum LlmObsExperimentsEventsActions {
+    /// List events for an experiment with optional filtering and sorting
+    List {
+        experiment_id: String,
+        #[arg(long, default_value = "20", help = "Number of events to return")]
+        limit: u32,
+        #[arg(long, default_value = "0", help = "Offset for pagination")]
+        offset: u32,
+        #[arg(long, help = "Filter by dimension key")]
+        filter_dimension_key: Option<String>,
+        #[arg(
+            long,
+            help = "Filter by dimension value (use with --filter-dimension-key)"
+        )]
+        filter_dimension_value: Option<String>,
+        #[arg(long, help = "Filter by metric label")]
+        filter_metric_label: Option<String>,
+        #[arg(long, help = "Sort by metric label")]
+        sort_by_metric: Option<String>,
+        #[arg(long, default_value = "desc", help = "Sort direction: asc or desc")]
+        sort_direction: String,
+    },
+    /// Get a single event from an experiment by ID
+    Get {
+        experiment_id: String,
+        event_id: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum LlmObsSpansActions {
+    /// Search LLM Observability spans
+    Search {
+        #[arg(long, help = "Search query string")]
+        query: Option<String>,
+        #[arg(long, help = "Filter by trace ID")]
+        trace_id: Option<String>,
+        #[arg(long, help = "Filter by span ID")]
+        span_id: Option<String>,
+        #[arg(
+            long,
+            help = "Filter by span kind (llm, retrieval, embedding, agent, tool, task, workflow)"
+        )]
+        span_kind: Option<String>,
+        #[arg(long, help = "Filter by span name")]
+        span_name: Option<String>,
+        #[arg(long, help = "Filter by ML app name")]
+        ml_app: Option<String>,
+        #[arg(long, help = "Return only root spans")]
+        root_spans_only: bool,
+        #[arg(long, help = "Start time (relative like '1h' or RFC3339)")]
+        from: Option<String>,
+        #[arg(long, help = "End time (relative like 'now' or RFC3339)")]
+        to: Option<String>,
+        #[arg(long, default_value = "20", help = "Number of spans to return")]
+        limit: u32,
+        #[arg(long, help = "Pagination cursor from a previous response")]
+        cursor: Option<String>,
     },
 }
 
@@ -5036,6 +5391,51 @@ enum TracesActions {
             help = "Facet to group by (e.g., service, resource_name, @http.status_code)"
         )]
         group_by: Option<String>,
+    },
+}
+
+// ---- ACP ----
+#[derive(Subcommand)]
+enum AcpActions {
+    /// Start an ACP server that delegates to Datadog Bits AI
+    ///
+    /// Spawns a local HTTP server implementing the Agent Communication Protocol (ACP).
+    /// Requests are proxied to the Datadog Bits AI agent endpoint
+    /// (/api/unstable/lassie-ng/v1/agents/{id}/messages).
+    ///
+    /// Endpoints served:
+    ///   GET  /agent.json       — ACP agent card
+    ///   POST /runs             — synchronous run
+    ///   POST /runs/stream      — streaming run (SSE)
+    ///
+    /// EXAMPLES:
+    ///   # Start on default port 9099 (auto-discovers first agent)
+    ///   pup acp serve
+    ///
+    ///   # Start with a specific agent ID
+    ///   pup acp serve --agent-id <uuid>
+    ///
+    ///   # Start on a custom port
+    ///   pup acp serve --port 8080
+    #[command(verbatim_doc_comment)]
+    Serve {
+        #[arg(
+            long,
+            default_value_t = commands::acp::DEFAULT_PORT,
+            help = "Port to listen on"
+        )]
+        port: u16,
+        #[arg(
+            long,
+            default_value = commands::acp::DEFAULT_HOST,
+            help = "Host address to bind to"
+        )]
+        host: String,
+        #[arg(
+            long,
+            help = "Datadog Bits AI agent ID to proxy (auto-discovered if omitted)"
+        )]
+        agent_id: Option<String>,
     },
 }
 
@@ -5287,7 +5687,12 @@ enum AuthActions {
     /// Logout and clear tokens
     Logout,
     /// Check authentication status
-    Status,
+    Status {
+        /// Datadog site to check status for (e.g. datadoghq.eu, us3.datadoghq.com).
+        /// Overrides DD_SITE env var and config file. Defaults to datadoghq.com.
+        #[arg(long, value_name = "SITE")]
+        site: Option<String>,
+    },
     /// Print access token (debug builds only)
     #[cfg(debug_assertions)]
     Token,
@@ -5904,6 +6309,24 @@ async fn main_inner() -> anyhow::Result<()> {
 
     let matches = Cli::command().get_matches();
     let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+
+    // Handle commands that do not require authentication before Config::from_env() so
+    // that sourcing completions in a shell rc (e.g. `source <(pup completions bash)`)
+    // never triggers a token refresh or prints auth-related messages.
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Commands::Completions { shell, install } = cli.command {
+        if install {
+            commands::completions::install(shell)?;
+        } else {
+            commands::completions::generate(shell);
+        }
+        return Ok(());
+    }
+    if let Commands::Version = cli.command {
+        println!("{}", version::build_info());
+        return Ok(());
+    }
+
     let mut cfg = config::Config::from_env()?;
 
     // Apply flag overrides
@@ -6036,8 +6459,15 @@ async fn main_inner() -> anyhow::Result<()> {
                             query: query.unwrap_or_default(),
                             from,
                             to,
-                            compute,
-                            group_by,
+                            compute: commands::logs::split_compute_args(&compute),
+                            group_by: group_by
+                                .map(|g| {
+                                    g.split(',')
+                                        .map(|s| s.trim().to_string())
+                                        .filter(|s| !s.is_empty())
+                                        .collect()
+                                })
+                                .unwrap_or_default(),
                             limit,
                             storage,
                         },
@@ -6379,6 +6809,27 @@ async fn main_inner() -> anyhow::Result<()> {
                         commands::infrastructure::hosts_get(&cfg, &hostname).await?;
                     }
                 },
+            }
+        }
+        // --- IDP (Internal Developer Portal) ---
+        Commands::Idp { action } => {
+            cfg.validate_auth()?;
+            match action {
+                IdpActions::Assist { entity } => {
+                    commands::idp::assist(&cfg, &entity).await?;
+                }
+                IdpActions::Find { query } => {
+                    commands::idp::find(&cfg, &query).await?;
+                }
+                IdpActions::Owner { entity } => {
+                    commands::idp::owner(&cfg, &entity).await?;
+                }
+                IdpActions::Deps { entity } => {
+                    commands::idp::deps(&cfg, &entity).await?;
+                }
+                IdpActions::Register { file } => {
+                    commands::idp::register(&cfg, &file).await?;
+                }
             }
         }
         // --- Audit Logs ---
@@ -7058,8 +7509,8 @@ async fn main_inner() -> anyhow::Result<()> {
             cfg.validate_auth()?;
             match action {
                 FleetActions::Agents { action } => match action {
-                    FleetAgentActions::List { page_size } => {
-                        commands::fleet::agents_list(&cfg, page_size).await?;
+                    FleetAgentActions::List { page_size, filter } => {
+                        commands::fleet::agents_list(&cfg, page_size, filter).await?;
                     }
                     FleetAgentActions::Get { agent_key } => {
                         commands::fleet::agents_get(&cfg, &agent_key).await?;
@@ -7438,6 +7889,38 @@ async fn main_inner() -> anyhow::Result<()> {
                 },
             }
         }
+        // --- Containers ---
+        Commands::Containers { action } => {
+            cfg.validate_auth()?;
+            match action {
+                ContainerActions::List {
+                    filter_tags,
+                    group_by,
+                    sort,
+                    page_size,
+                } => {
+                    commands::containers::list(&cfg, filter_tags, group_by, sort, page_size)
+                        .await?;
+                }
+                ContainerActions::Images { action } => match action {
+                    ContainerImageActions::List {
+                        filter_tags,
+                        group_by,
+                        sort,
+                        page_size,
+                    } => {
+                        commands::containers::images_list(
+                            &cfg,
+                            filter_tags,
+                            group_by,
+                            sort,
+                            page_size,
+                        )
+                        .await?;
+                    }
+                },
+            }
+        }
         // --- Cost ---
         Commands::Cost { action } => {
             cfg.validate_auth()?;
@@ -7552,6 +8035,14 @@ async fn main_inner() -> anyhow::Result<()> {
                 } => {
                     commands::apm::flow_map(&cfg, query, limit, from, to).await?;
                 }
+                ApmActions::Troubleshooting { action } => match action {
+                    ApmTroubleshootingActions::List {
+                        hostname,
+                        timeframe,
+                    } => {
+                        commands::apm::troubleshooting_list(&cfg, hostname, timeframe).await?;
+                    }
+                },
             }
         }
         // --- DDSQL ---
@@ -7574,8 +8065,9 @@ async fn main_inner() -> anyhow::Result<()> {
                     from,
                     to,
                     interval,
+                    limit,
                 } => {
-                    commands::ddsql::time_series(&cfg, &query, &from, &to, interval).await?;
+                    commands::ddsql::time_series(&cfg, &query, &from, &to, interval, limit).await?;
                 }
             }
         }
@@ -7707,6 +8199,16 @@ async fn main_inner() -> anyhow::Result<()> {
                 }
             }
         }
+        // --- ACP ---
+        Commands::Acp { action } => match action {
+            AcpActions::Serve {
+                port,
+                host,
+                agent_id,
+            } => {
+                commands::acp::serve(&cfg, port, &host, agent_id).await?;
+            }
+        },
         // --- Agent ---
         Commands::Agent { action } => match action {
             AgentActions::Schema { compact } => {
@@ -7812,7 +8314,12 @@ async fn main_inner() -> anyhow::Result<()> {
                 commands::auth::login(&cfg, resolved).await?
             }
             AuthActions::Logout => commands::auth::logout(&cfg).await?,
-            AuthActions::Status => commands::auth::status(&cfg)?,
+            AuthActions::Status { site } => {
+                if let Some(s) = site {
+                    cfg.site = s;
+                }
+                commands::auth::status(&cfg)?
+            }
             #[cfg(debug_assertions)]
             AuthActions::Token => commands::auth::token(&cfg)?,
             AuthActions::Refresh => commands::auth::refresh(&cfg).await?,
@@ -7917,6 +8424,71 @@ async fn main_inner() -> anyhow::Result<()> {
                     LlmObsExperimentsActions::Delete { file } => {
                         commands::llm_obs::experiments_delete(&cfg, &file).await?;
                     }
+                    LlmObsExperimentsActions::Summary { experiment_id } => {
+                        commands::llm_obs::experiments_summary(&cfg, &experiment_id).await?;
+                    }
+                    LlmObsExperimentsActions::Events { action } => match action {
+                        LlmObsExperimentsEventsActions::List {
+                            experiment_id,
+                            limit,
+                            offset,
+                            filter_dimension_key,
+                            filter_dimension_value,
+                            filter_metric_label,
+                            sort_by_metric,
+                            sort_direction,
+                        } => {
+                            commands::llm_obs::experiments_events_list(
+                                &cfg,
+                                &experiment_id,
+                                limit,
+                                offset,
+                                filter_dimension_key,
+                                filter_dimension_value,
+                                filter_metric_label,
+                                sort_by_metric,
+                                &sort_direction,
+                            )
+                            .await?;
+                        }
+                        LlmObsExperimentsEventsActions::Get {
+                            experiment_id,
+                            event_id,
+                        } => {
+                            commands::llm_obs::experiments_events_get(
+                                &cfg,
+                                &experiment_id,
+                                &event_id,
+                            )
+                            .await?;
+                        }
+                    },
+                    LlmObsExperimentsActions::MetricValues {
+                        experiment_id,
+                        metric_label,
+                        segment_by_dimension,
+                        segment_dimension_value,
+                    } => {
+                        commands::llm_obs::experiments_metric_values(
+                            &cfg,
+                            &experiment_id,
+                            &metric_label,
+                            segment_by_dimension,
+                            segment_dimension_value,
+                        )
+                        .await?;
+                    }
+                    LlmObsExperimentsActions::DimensionValues {
+                        experiment_id,
+                        dimension_key,
+                    } => {
+                        commands::llm_obs::experiments_dimension_values(
+                            &cfg,
+                            &experiment_id,
+                            &dimension_key,
+                        )
+                        .await?;
+                    }
                 },
                 LlmObsActions::Datasets { action } => match action {
                     LlmObsDatasetsActions::Create { project_id, file } => {
@@ -7924,6 +8496,37 @@ async fn main_inner() -> anyhow::Result<()> {
                     }
                     LlmObsDatasetsActions::List { project_id } => {
                         commands::llm_obs::datasets_list(&cfg, &project_id).await?;
+                    }
+                },
+                LlmObsActions::Spans { action } => match action {
+                    LlmObsSpansActions::Search {
+                        query,
+                        trace_id,
+                        span_id,
+                        span_kind,
+                        span_name,
+                        ml_app,
+                        root_spans_only,
+                        from,
+                        to,
+                        limit,
+                        cursor,
+                    } => {
+                        commands::llm_obs::spans_search(
+                            &cfg,
+                            query,
+                            trace_id,
+                            span_id,
+                            span_kind,
+                            span_name,
+                            ml_app,
+                            root_spans_only,
+                            from,
+                            to,
+                            limit,
+                            cursor,
+                        )
+                        .await?;
                     }
                 },
             }

@@ -1,3 +1,4 @@
+pub mod acp;
 pub mod agent;
 pub mod alias;
 pub mod api_keys;
@@ -14,6 +15,7 @@ pub mod cloud_auth;
 pub mod code_coverage;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod completions;
+pub mod containers;
 pub mod cost;
 pub mod dashboards;
 pub mod data_governance;
@@ -24,6 +26,7 @@ pub mod events;
 pub mod fleet;
 pub mod google_chat;
 pub mod hamr;
+pub mod idp;
 pub mod incidents;
 pub mod infrastructure;
 pub mod integrations;

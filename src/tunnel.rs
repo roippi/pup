@@ -271,8 +271,7 @@ impl Handler for SshHandler {
                 match tcp_read.read(&mut buf).await {
                     Ok(0) | Err(_) => break,
                     Ok(n) => {
-                        let data = russh::CryptoVec::from_slice(&buf[..n]);
-                        if handle.data(channel_id, data).await.is_err() {
+                        if handle.data(channel_id, buf[..n].to_vec()).await.is_err() {
                             break;
                         }
                     }

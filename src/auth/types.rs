@@ -67,6 +67,7 @@ pub fn read_only_scopes() -> Vec<&'static str> {
         "incident_notification_settings_read",
         "incident_settings_read",
         "integrations_read",
+        "llm_observability_read",
         "logs_read_archives",
         "logs_read_config",
         "logs_read_data",
@@ -75,6 +76,7 @@ pub fn read_only_scopes() -> Vec<&'static str> {
         "monitors_read",
         "notebooks_read",
         "oci_configuration_read",
+        "reference_tables_read",
         "rum_apps_read",
         "rum_retention_filters_read",
         "rum_session_replay_read",
@@ -139,6 +141,9 @@ pub fn default_scopes() -> Vec<&'static str> {
         // Integrations (Jira, ServiceNow, Slack, Webhooks)
         "integrations_read",
         "manage_integrations",
+        // LLM Observability
+        "llm_observability_read",
+        "llm_observability_write",
         // Logs
         "logs_generate_metrics",
         "logs_modify_indexes",
@@ -162,6 +167,10 @@ pub fn default_scopes() -> Vec<&'static str> {
         "oci_configurations_manage",
         // Organizations
         "org_management",
+        // Reference Tables
+        "reference_tables_read",
+        "reference_tables_write",
+        // RUM
         // RUM
         "rum_apps_read",
         "rum_apps_write",
@@ -241,7 +250,7 @@ mod tests {
     #[test]
     fn test_default_scopes() {
         let scopes = default_scopes();
-        assert_eq!(scopes.len(), 70);
+        assert_eq!(scopes.len(), 74);
         assert!(scopes.contains(&"dashboards_read"));
         assert!(scopes.contains(&"monitors_read"));
         assert!(scopes.contains(&"logs_read_data"));

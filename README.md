@@ -41,7 +41,7 @@ pup metrics query --query="avg:system.cpu.user{*}"   # Track the metrics tail
 
 <!-- Last updated: 2026-03-17 | API Client: datadog-api-client-rust v0.28 -->
 
-Pup implements **52 of 85+ available Datadog APIs** (61% coverage) with **320+ subcommands** across **56 command groups**.
+Pup implements **54 of 85+ available Datadog APIs** (63% coverage) with **320+ subcommands** across **57 command groups**.
 
 See [docs/COMMANDS.md](docs/COMMANDS.md) for detailed command reference.
 
@@ -101,7 +101,7 @@ See [docs/COMMANDS.md](docs/COMMANDS.md) for detailed command reference.
 </details>
 
 <details>
-<summary><b>☁️ Infrastructure & Cloud (7/9 implemented)</b></summary>
+<summary><b>☁️ Infrastructure & Cloud (8/9 implemented)</b></summary>
 
 | API Domain | Status | Pup Commands | Notes |
 |------------|--------|--------------|-------|
@@ -112,7 +112,7 @@ See [docs/COMMANDS.md](docs/COMMANDS.md) for detailed command reference.
 | Cloud (GCP) | ✅ | `cloud gcp list` | GCP integration management |
 | Cloud (Azure) | ✅ | `cloud azure list` | Azure integration management |
 | Cloud (OCI) | ✅ | `cloud oci` | **New** — Oracle Cloud tenancy configs and products |
-| Containers | ❌ | - | Not yet implemented |
+| Containers | ✅ | `containers list`, `containers images list` | Containers |
 | Processes | ❌ | - | Not yet implemented |
 
 </details>
@@ -473,6 +473,39 @@ Pup is also available as a **Claude Code plugin marketplace**:
 ```
 /plugin marketplace add datadog-labs/pup
 ```
+
+## ACP Server
+
+`pup acp serve` turns pup into a local AI agent server, letting coding tools talk directly to Datadog Bits AI. It supports two protocols:
+
+- **[ACP](https://agentcommunicationprotocol.dev/)** — Agent Communication Protocol for ACP-native clients
+- **OpenAI-compatible** — `POST /chat/completions` for [opencode](https://opencode.ai), Cursor, and any `@ai-sdk/openai-compatible` client
+
+```bash
+# Start the server (auto-discovers your first Datadog AI agent)
+pup acp serve
+
+# Or target a specific agent
+pup acp serve --agent-id <uuid> --port 9099
+```
+
+Point any OpenAI-compatible client at `http://127.0.0.1:9099` to start asking questions about your Datadog environment.
+
+**opencode** (`~/Library/Application Support/opencode/opencode.jsonc`):
+```jsonc
+{
+  "provider": {
+    "datadog": {
+      "name": "Datadog AI",
+      "npm": "@ai-sdk/openai-compatible",
+      "models": { "datadog-ai": { "name": "Datadog AI Agent" } },
+      "options": { "baseURL": "http://127.0.0.1:9099" }
+    }
+  }
+}
+```
+
+See [docs/EXAMPLES.md#acp-server](docs/EXAMPLES.md) for full usage details.
 
 ## Development
 
