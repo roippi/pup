@@ -24,12 +24,39 @@ pub struct VarDef {
     pub default: Option<String>,
 }
 
+/// A reusable step template loaded from ~/.config/pup/runbooks/_templates/<name>.yaml.
+/// All fields are optional; a referencing step's fields take precedence.
+#[derive(Deserialize, Clone, Default)]
+pub struct StepTemplate {
+    pub kind: Option<String>,
+    pub run: Option<String>,
+    pub workflow_id: Option<String>,
+    pub inputs: Option<HashMap<String, String>>,
+    pub url: Option<String>,
+    pub method: Option<String>,
+    pub body: Option<String>,
+    pub headers: Option<HashMap<String, String>>,
+    pub message: Option<String>,
+    pub on_failure: Option<String>,
+    pub when: Option<String>,
+    pub optional: Option<bool>,
+    pub capture: Option<String>,
+    pub poll: Option<PollConfig>,
+    pub assert: Option<AssertConfig>,
+}
+
 /// A single step in a runbook.
 #[derive(Deserialize, Serialize, Clone)]
 pub struct Step {
     pub name: String,
     /// "pup" | "shell" | "datadog-workflow" | "confirm" | "http"
+    /// May be omitted when a `template` is referenced that supplies the kind.
+    #[serde(default)]
     pub kind: String,
+    /// Optional template name to inherit fields from (_templates/<name>.yaml).
+    /// Step fields override template fields.
+    #[serde(default)]
+    pub template: Option<String>,
     /// pup or shell command to run
     pub run: Option<String>,
     /// Datadog Workflow ID (for kind: datadog-workflow)

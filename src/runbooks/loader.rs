@@ -1,12 +1,95 @@
 use anyhow::Result;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use super::{Runbook, RunbookMeta};
+use super::{Runbook, RunbookMeta, Step, StepTemplate};
 use crate::config::Config;
 
 /// Returns the runbooks directory: ~/.config/pup/runbooks/
 pub fn runbooks_dir(_cfg: &Config) -> Option<PathBuf> {
     crate::config::config_dir().map(|d| d.join("runbooks"))
+}
+
+/// Returns the templates directory: ~/.config/pup/runbooks/_templates/
+pub fn templates_dir(cfg: &Config) -> Option<PathBuf> {
+    runbooks_dir(cfg).map(|d| d.join("_templates"))
+}
+
+/// Load a named step template from the _templates/ directory.
+fn load_template(dir: &Path, name: &str) -> Result<StepTemplate> {
+    for ext in &["yaml", "yml"] {
+        let path = dir.join(format!("{name}.{ext}"));
+        if path.exists() {
+            let contents = std::fs::read_to_string(&path)
+                .map_err(|e| anyhow::anyhow!("failed to read template {:?}: {e}", path))?;
+            return serde_norway::from_str(&contents)
+                .map_err(|e| anyhow::anyhow!("failed to parse template '{name}': {e}"));
+        }
+    }
+    anyhow::bail!("step template '{name}' not found in {}", dir.display())
+}
+
+/// Apply a template to a step: template fields fill in any fields the step left unset.
+fn apply_template(mut step: Step, tmpl: &StepTemplate) -> Result<Step> {
+    if step.kind.is_empty() {
+        step.kind = tmpl
+            .kind
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("step '{}' has no 'kind' and template provides none", step.name))?;
+    }
+    macro_rules! fill {
+        ($field:ident) => {
+            if step.$field.is_none() {
+                step.$field = tmpl.$field.clone();
+            }
+        };
+    }
+    fill!(run);
+    fill!(workflow_id);
+    fill!(inputs);
+    fill!(url);
+    fill!(method);
+    fill!(body);
+    fill!(message);
+    fill!(on_failure);
+    fill!(when);
+    fill!(optional);
+    fill!(capture);
+    fill!(poll);
+    fill!(assert);
+    // Merge headers: template headers are the base; step headers override per-key.
+    step.headers = match (step.headers, tmpl.headers.clone()) {
+        (Some(mut sh), Some(th)) => {
+            for (k, v) in th {
+                sh.entry(k).or_insert(v);
+            }
+            Some(sh)
+        }
+        (sh, th) => sh.or(th),
+    };
+    Ok(step)
+}
+
+/// Resolve template references in a runbook's steps.
+fn resolve_steps(steps: Vec<Step>, tmpl_dir: Option<&Path>) -> Result<Vec<Step>> {
+    steps
+        .into_iter()
+        .map(|step| {
+            let tmpl_name = step.template.clone();
+            match tmpl_name {
+                None => Ok(step),
+                Some(ref name) => {
+                    let dir = tmpl_dir.ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "step '{}' references template '{name}' but no templates directory found",
+                            step.name
+                        )
+                    })?;
+                    let tmpl = load_template(dir, name)?;
+                    apply_template(step, &tmpl)
+                }
+            }
+        })
+        .collect()
 }
 
 /// List all runbooks, optionally filtered by tags (format: "key:value").
@@ -23,8 +106,19 @@ pub fn list_runbooks(cfg: &Config, tags: &[String]) -> Result<Vec<RunbookMeta>> 
     let mut entries: Vec<_> = std::fs::read_dir(&dir)?
         .filter_map(|e| e.ok())
         .filter(|e| {
-            e.path()
-                .extension()
+            let path = e.path();
+            // Skip the _templates/ subdirectory and any file starting with '_'
+            if path.is_dir() {
+                return false;
+            }
+            let stem = path
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("");
+            if stem.starts_with('_') {
+                return false;
+            }
+            path.extension()
                 .and_then(|x| x.to_str())
                 .map(|x| x == "yaml" || x == "yml")
                 .unwrap_or(false)
@@ -66,7 +160,7 @@ pub fn list_runbooks(cfg: &Config, tags: &[String]) -> Result<Vec<RunbookMeta>> 
     Ok(results)
 }
 
-/// Load a single runbook by name from the runbooks directory.
+/// Load a single runbook by name from the runbooks directory, resolving template steps.
 pub fn load_runbook(cfg: &Config, name: &str) -> Result<Runbook> {
     let dir = runbooks_dir(cfg)
         .ok_or_else(|| anyhow::anyhow!("could not determine runbooks directory"))?;
@@ -77,8 +171,11 @@ pub fn load_runbook(cfg: &Config, name: &str) -> Result<Runbook> {
         if path.exists() {
             let contents = std::fs::read_to_string(&path)
                 .map_err(|e| anyhow::anyhow!("failed to read {:?}: {e}", path))?;
-            return serde_norway::from_str(&contents)
-                .map_err(|e| anyhow::anyhow!("failed to parse runbook '{name}': {e}"));
+            let mut runbook: Runbook = serde_norway::from_str(&contents)
+                .map_err(|e| anyhow::anyhow!("failed to parse runbook '{name}': {e}"))?;
+            let tmpl_dir = templates_dir(cfg);
+            runbook.steps = resolve_steps(runbook.steps, tmpl_dir.as_deref())?;
+            return Ok(runbook);
         }
     }
 
