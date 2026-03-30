@@ -1,6 +1,8 @@
 use anyhow::{bail, Result};
 #[cfg(not(feature = "browser"))]
 use serde::Deserialize;
+#[cfg(not(feature = "browser"))]
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Runtime configuration with precedence: flag > env > file > default.
@@ -13,6 +15,7 @@ pub struct Config {
     pub output_format: OutputFormat,
     pub auto_approve: bool,
     pub agent_mode: bool,
+    pub read_only: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -20,6 +23,8 @@ pub enum OutputFormat {
     Json,
     Table,
     Yaml,
+    Csv,
+    Tsv,
 }
 
 impl std::fmt::Display for OutputFormat {
@@ -28,6 +33,8 @@ impl std::fmt::Display for OutputFormat {
             OutputFormat::Json => write!(f, "json"),
             OutputFormat::Table => write!(f, "table"),
             OutputFormat::Yaml => write!(f, "yaml"),
+            OutputFormat::Csv => write!(f, "csv"),
+            OutputFormat::Tsv => write!(f, "tsv"),
         }
     }
 }
@@ -39,9 +46,19 @@ impl std::str::FromStr for OutputFormat {
             "json" => Ok(OutputFormat::Json),
             "table" => Ok(OutputFormat::Table),
             "yaml" => Ok(OutputFormat::Yaml),
-            _ => bail!("invalid output format: {s:?} (expected json, table, or yaml)"),
+            "csv" => Ok(OutputFormat::Csv),
+            "tsv" => Ok(OutputFormat::Tsv),
+            _ => bail!("invalid output format: {s:?} (expected json, table, yaml, csv, or tsv)"),
         }
     }
+}
+
+/// Per-profile settings in the config file.
+#[cfg(not(feature = "browser"))]
+#[derive(Deserialize, Default)]
+struct ProfileConfig {
+    /// Comma-separated OAuth scopes to request when logging in with this profile.
+    scopes: Option<String>,
 }
 
 /// Config file structure (~/.config/pup/config.yaml)
@@ -55,6 +72,11 @@ struct FileConfig {
     org: Option<String>,
     output: Option<String>,
     auto_approve: Option<bool>,
+    read_only: Option<bool>,
+    /// Default OAuth scopes to request on login (comma-separated).
+    scopes: Option<String>,
+    /// Per-org profile settings. Profile key matches the --org value used at login.
+    profiles: Option<HashMap<String, ProfileConfig>>,
 }
 
 impl Config {
@@ -65,7 +87,9 @@ impl Config {
         let file_cfg = load_config_file().unwrap_or_default();
 
         let access_token = env_or("DD_ACCESS_TOKEN", file_cfg.access_token);
-        let site = env_or("DD_SITE", file_cfg.site).unwrap_or_else(|| "datadoghq.com".into());
+        let site = normalize_site(
+            &env_or("DD_SITE", file_cfg.site).unwrap_or_else(|| "datadoghq.com".into()),
+        );
         let org = env_or("DD_ORG", file_cfg.org); // flag override applied in main_inner
 
         // If no token from env/file, try loading from keychain/storage (where `pup auth login` saves)
@@ -85,6 +109,9 @@ impl Config {
                 || env_bool("DD_CLI_AUTO_APPROVE")
                 || file_cfg.auto_approve.unwrap_or(false),
             agent_mode: false, // set by caller from --agent flag or useragent detection
+            read_only: env_bool("DD_READ_ONLY")
+                || env_bool("DD_CLI_READ_ONLY")
+                || file_cfg.read_only.unwrap_or(false),
         };
 
         Ok(cfg)
@@ -103,17 +130,25 @@ impl Config {
             api_key,
             app_key,
             access_token,
-            site,
+            site: normalize_site(&site),
             org: None,
             output_format: OutputFormat::Json,
             auto_approve: false,
             agent_mode: false,
+            read_only: false,
         }
     }
 
     /// Validate that sufficient auth credentials are configured.
     pub fn validate_auth(&self) -> Result<()> {
         if self.access_token.is_none() && (self.api_key.is_none() || self.app_key.is_none()) {
+            #[cfg(all(not(feature = "browser"), not(target_arch = "wasm32")))]
+            if has_stored_refresh_token(&self.site, self.org.as_deref()) {
+                bail!(
+                    "authentication expired. Run 'pup auth refresh' to renew your session, \
+                     or 'pup auth login' to start a new one"
+                );
+            }
             bail!(
                 "authentication required: set DD_ACCESS_TOKEN for bearer auth, \
                  run 'pup auth login' for OAuth2, \
@@ -202,10 +237,49 @@ pub fn config_dir() -> Option<PathBuf> {
 fn load_config_file() -> Option<FileConfig> {
     let path = config_dir()?.join("config.yaml");
     let contents = std::fs::read_to_string(path).ok()?;
-    serde_yaml::from_str(&contents).ok()
+    serde_norway::from_str(&contents).ok()
+}
+
+/// Load configured login scopes for a given org profile from the config file.
+/// Profile key matches the --org value; falls back to top-level scopes field.
+/// Returns None if no scopes are configured (caller uses defaults).
+#[cfg(not(feature = "browser"))]
+pub fn load_configured_scopes(org: Option<&str>) -> Option<Vec<String>> {
+    let file_cfg = load_config_file()?;
+
+    // Check per-org profile first
+    if let (Some(org_name), Some(profiles)) = (org, &file_cfg.profiles) {
+        if let Some(profile) = profiles.get(org_name) {
+            if let Some(scopes_str) = &profile.scopes {
+                let scopes = parse_scopes(scopes_str);
+                if !scopes.is_empty() {
+                    return Some(scopes);
+                }
+            }
+        }
+    }
+
+    // Fall back to top-level scopes
+    let scopes = parse_scopes(file_cfg.scopes.as_deref()?);
+    if scopes.is_empty() {
+        None
+    } else {
+        Some(scopes)
+    }
+}
+
+/// Parse a comma-separated scope string into a Vec of trimmed, non-empty strings.
+#[cfg(not(feature = "browser"))]
+pub fn parse_scopes(s: &str) -> Vec<String> {
+    s.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect()
 }
 
 /// Try to load a valid (non-expired) access token from keychain/file storage.
+/// If the token is expired, attempts an automatic refresh using the stored refresh token.
 /// Returns None silently on any error — callers fall through to other auth methods.
 #[cfg(all(not(feature = "browser"), not(target_arch = "wasm32")))]
 pub fn load_token_from_storage(site: &str, org: Option<&str>) -> Option<String> {
@@ -213,10 +287,124 @@ pub fn load_token_from_storage(site: &str, org: Option<&str>) -> Option<String> 
     let lock = guard.lock().ok()?;
     let store = lock.as_ref()?;
     let tokens = store.load_tokens(site, org).ok()??;
-    if tokens.is_expired() {
-        return None;
+    let creds = store.load_client_credentials(site).ok().flatten();
+
+    drop(lock);
+
+    let result = resolve_token(tokens, creds.as_ref(), |refresh_token, creds| {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                let dcr_client = crate::auth::dcr::DcrClient::new(site);
+                dcr_client.refresh_token(refresh_token, creds).await.ok()
+            })
+        })
+    });
+
+    match result {
+        ResolvedToken::Valid(access_token) => Some(access_token),
+        ResolvedToken::Refreshed(new_tokens) => {
+            let guard = crate::auth::storage::get_storage().ok()?;
+            let lock = guard.lock().ok()?;
+            let store = lock.as_ref()?;
+            store.save_tokens(site, org, &new_tokens).ok()?;
+            eprintln!("🔄 Access token refreshed automatically.");
+            Some(new_tokens.access_token)
+        }
+        ResolvedToken::Expired => None,
     }
-    Some(tokens.access_token)
+}
+
+/// Returns true if a non-empty refresh token exists in storage for the given site/org.
+/// Used to tailor the auth-required error message.
+#[cfg(all(not(feature = "browser"), not(target_arch = "wasm32")))]
+fn has_stored_refresh_token(site: &str, org: Option<&str>) -> bool {
+    let Ok(guard) = crate::auth::storage::get_storage() else {
+        return false;
+    };
+    let Ok(lock) = guard.lock() else { return false };
+    let Some(store) = lock.as_ref() else {
+        return false;
+    };
+    matches!(
+        store.load_tokens(site, org),
+        Ok(Some(ref t)) if !t.refresh_token.is_empty()
+    )
+}
+
+#[cfg(all(not(feature = "browser"), not(target_arch = "wasm32")))]
+enum ResolvedToken {
+    Valid(String),
+    Refreshed(crate::auth::types::TokenSet),
+    Expired,
+}
+
+#[cfg(all(not(feature = "browser"), not(target_arch = "wasm32")))]
+fn resolve_token<F>(
+    tokens: crate::auth::types::TokenSet,
+    creds: Option<&crate::auth::types::ClientCredentials>,
+    refresh_fn: F,
+) -> ResolvedToken
+where
+    F: FnOnce(&str, &crate::auth::types::ClientCredentials) -> Option<crate::auth::types::TokenSet>,
+{
+    if !tokens.is_expired() {
+        return ResolvedToken::Valid(tokens.access_token);
+    }
+
+    if tokens.refresh_token.is_empty() {
+        return ResolvedToken::Expired;
+    }
+
+    let creds = match creds {
+        Some(c) => c,
+        None => return ResolvedToken::Expired,
+    };
+
+    match refresh_fn(&tokens.refresh_token, creds) {
+        Some(new_tokens) => ResolvedToken::Refreshed(new_tokens),
+        None => ResolvedToken::Expired,
+    }
+}
+
+/// Normalize a raw site value from user input into a canonical form.
+///
+/// Rules (applied in order):
+/// 1. Oncall sites (`navy.oncall.datadoghq.com`) are passed through unchanged —
+///    they are already fully-qualified API hosts.
+/// 2. Split the domain into labels and determine how many trailing labels to keep:
+///    - If the 3rd-from-last label matches `[a-z]{2}[0-9]+` (a regional prefix
+///      like `us3`, `eu1`, `ap1`) keep the last **3** labels.
+///    - Otherwise keep the last **2** labels.
+///
+/// Examples:
+///   `app.datadoghq.com`     → `datadoghq.com`
+///   `app.us3.datadoghq.com` → `us3.datadoghq.com`
+///   `us3.datadoghq.com`     → `us3.datadoghq.com`
+///   `datadoghq.com`         → `datadoghq.com`
+pub fn normalize_site(site: &str) -> String {
+    if site.contains("oncall") {
+        return site.to_string();
+    }
+    let parts: Vec<&str> = site.split('.').collect();
+    let n = parts.len();
+    if n < 2 {
+        return site.to_string();
+    }
+    let keep_from = if n >= 3 && is_region_prefix(parts[n - 3]) {
+        n - 3
+    } else {
+        n - 2
+    };
+    parts[keep_from..].join(".")
+}
+
+/// Returns true if `s` matches the pattern `[a-z]{2}[0-9]+` (e.g. "us3", "eu1", "ap1").
+fn is_region_prefix(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() >= 3
+        && b[0].is_ascii_lowercase()
+        && b[1].is_ascii_lowercase()
+        && b[2..].iter().all(|c| c.is_ascii_digit())
 }
 
 #[cfg(not(feature = "browser"))]
@@ -253,6 +441,7 @@ mod tests {
             output_format: OutputFormat::Json,
             auto_approve: false,
             agent_mode: false,
+            read_only: false,
         }
     }
 
@@ -265,6 +454,10 @@ mod tests {
             OutputFormat::Table
         );
         assert_eq!("yaml".parse::<OutputFormat>().unwrap(), OutputFormat::Yaml);
+        assert_eq!("csv".parse::<OutputFormat>().unwrap(), OutputFormat::Csv);
+        assert_eq!("CSV".parse::<OutputFormat>().unwrap(), OutputFormat::Csv);
+        assert_eq!("tsv".parse::<OutputFormat>().unwrap(), OutputFormat::Tsv);
+        assert_eq!("TSV".parse::<OutputFormat>().unwrap(), OutputFormat::Tsv);
         assert!("xml".parse::<OutputFormat>().is_err());
     }
 
@@ -273,6 +466,8 @@ mod tests {
         assert_eq!(OutputFormat::Json.to_string(), "json");
         assert_eq!(OutputFormat::Table.to_string(), "table");
         assert_eq!(OutputFormat::Yaml.to_string(), "yaml");
+        assert_eq!(OutputFormat::Csv.to_string(), "csv");
+        assert_eq!(OutputFormat::Tsv.to_string(), "tsv");
     }
 
     #[test]
@@ -308,13 +503,30 @@ mod tests {
     #[test]
     fn test_validate_auth_none() {
         let cfg = make_cfg(None, None, None);
-        assert!(cfg.validate_auth().is_err());
+        let err = cfg.validate_auth().unwrap_err();
+        assert!(err.to_string().contains("pup auth login"));
     }
 
     #[test]
     fn test_validate_auth_partial_keys() {
         let cfg = make_cfg(Some("key"), None, None);
         assert!(cfg.validate_auth().is_err());
+    }
+
+    #[test]
+    fn test_validate_auth_error_message_suggests_login_by_default() {
+        // Use a site name that will never have stored tokens.
+        let mut cfg = make_cfg(None, None, None);
+        cfg.site = "no-tokens.test.invalid".into();
+        let err = cfg.validate_auth().unwrap_err().to_string();
+        assert!(
+            err.contains("pup auth login"),
+            "should suggest 'pup auth login' when no stored session: {err}"
+        );
+        assert!(
+            !err.contains("pup auth refresh"),
+            "should not suggest 'pup auth refresh' when no stored session: {err}"
+        );
     }
 
     #[test]
@@ -354,6 +566,122 @@ mod tests {
         let mut cfg = make_cfg(None, None, Some("t"));
         cfg.site = "navy.oncall.datadoghq.com".into();
         assert_eq!(cfg.api_host(), "navy.oncall.datadoghq.com");
+    }
+
+    // --- normalize_site unit tests ---
+
+    #[test]
+    fn test_normalize_site_plain() {
+        assert_eq!(normalize_site("datadoghq.com"), "datadoghq.com");
+    }
+
+    #[test]
+    fn test_normalize_site_app_prefix() {
+        assert_eq!(normalize_site("app.datadoghq.com"), "datadoghq.com");
+    }
+
+    #[test]
+    fn test_normalize_site_app_prefix_eu() {
+        assert_eq!(normalize_site("app.datadoghq.eu"), "datadoghq.eu");
+    }
+
+    #[test]
+    fn test_normalize_site_app_prefix_gov() {
+        assert_eq!(normalize_site("app.ddog-gov.com"), "ddog-gov.com");
+    }
+
+    #[test]
+    fn test_normalize_site_app_prefix_staging() {
+        assert_eq!(normalize_site("app.datad0g.com"), "datad0g.com");
+    }
+
+    #[test]
+    fn test_normalize_site_region_prefix() {
+        assert_eq!(normalize_site("us3.datadoghq.com"), "us3.datadoghq.com");
+    }
+
+    #[test]
+    fn test_normalize_site_app_and_region_prefix() {
+        assert_eq!(normalize_site("app.us3.datadoghq.com"), "us3.datadoghq.com");
+    }
+
+    #[test]
+    fn test_normalize_site_eu1_region() {
+        assert_eq!(normalize_site("eu1.datadoghq.com"), "eu1.datadoghq.com");
+    }
+
+    #[test]
+    fn test_normalize_site_app_eu1_region() {
+        assert_eq!(normalize_site("app.eu1.datadoghq.com"), "eu1.datadoghq.com");
+    }
+
+    #[test]
+    fn test_normalize_site_ap1_region() {
+        assert_eq!(normalize_site("ap1.datadoghq.com"), "ap1.datadoghq.com");
+    }
+
+    #[test]
+    fn test_normalize_site_oncall_passthrough() {
+        assert_eq!(
+            normalize_site("navy.oncall.datadoghq.com"),
+            "navy.oncall.datadoghq.com"
+        );
+    }
+
+    // --- api_host tests (site already normalized at construction) ---
+
+    #[test]
+    fn test_api_host_app_prefix_us1() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        std::env::remove_var("PUP_MOCK_SERVER");
+        let mut cfg = make_cfg(None, None, Some("t"));
+        cfg.site = normalize_site("app.datadoghq.com");
+        assert_eq!(cfg.api_host(), "api.datadoghq.com");
+    }
+
+    #[test]
+    fn test_api_host_app_prefix_eu() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        std::env::remove_var("PUP_MOCK_SERVER");
+        let mut cfg = make_cfg(None, None, Some("t"));
+        cfg.site = normalize_site("app.datadoghq.eu");
+        assert_eq!(cfg.api_host(), "api.datadoghq.eu");
+    }
+
+    #[test]
+    fn test_api_host_app_prefix_gov() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        std::env::remove_var("PUP_MOCK_SERVER");
+        let mut cfg = make_cfg(None, None, Some("t"));
+        cfg.site = normalize_site("app.ddog-gov.com");
+        assert_eq!(cfg.api_host(), "api.ddog-gov.com");
+    }
+
+    #[test]
+    fn test_api_host_app_prefix_staging() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        std::env::remove_var("PUP_MOCK_SERVER");
+        let mut cfg = make_cfg(None, None, Some("t"));
+        cfg.site = normalize_site("app.datad0g.com");
+        assert_eq!(cfg.api_host(), "api.datad0g.com");
+    }
+
+    #[test]
+    fn test_api_host_region_us3() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        std::env::remove_var("PUP_MOCK_SERVER");
+        let mut cfg = make_cfg(None, None, Some("t"));
+        cfg.site = normalize_site("us3.datadoghq.com");
+        assert_eq!(cfg.api_host(), "api.us3.datadoghq.com");
+    }
+
+    #[test]
+    fn test_api_host_app_region_us3() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        std::env::remove_var("PUP_MOCK_SERVER");
+        let mut cfg = make_cfg(None, None, Some("t"));
+        cfg.site = normalize_site("app.us3.datadoghq.com");
+        assert_eq!(cfg.api_host(), "api.us3.datadoghq.com");
     }
 
     #[test]
@@ -479,5 +807,201 @@ mod tests {
             Some("fallback".into())
         );
         std::env::remove_var("__PUP_TEST_ENV_EMPTY__");
+    }
+
+    #[test]
+    fn test_file_config_read_only() {
+        let yaml = "read_only: true\n";
+        let fc: FileConfig = serde_norway::from_str(yaml).unwrap();
+        assert_eq!(fc.read_only, Some(true));
+    }
+
+    #[test]
+    fn test_read_only_from_env() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+        std::env::remove_var("DD_READ_ONLY");
+        std::env::remove_var("DD_CLI_READ_ONLY");
+        std::env::set_var("PUP_CONFIG_DIR", "/tmp/pup_test_nonexistent");
+        std::env::set_var("DD_ACCESS_TOKEN", "test");
+
+        let cfg = Config::from_env().unwrap();
+        assert!(!cfg.read_only);
+
+        std::env::set_var("DD_READ_ONLY", "true");
+        let cfg = Config::from_env().unwrap();
+        assert!(cfg.read_only);
+        std::env::remove_var("DD_READ_ONLY");
+
+        std::env::set_var("DD_CLI_READ_ONLY", "1");
+        let cfg = Config::from_env().unwrap();
+        assert!(cfg.read_only);
+        std::env::remove_var("DD_CLI_READ_ONLY");
+
+        std::env::remove_var("DD_ACCESS_TOKEN");
+        std::env::remove_var("PUP_CONFIG_DIR");
+    }
+
+    #[test]
+    fn test_parse_scopes_basic() {
+        assert_eq!(
+            parse_scopes("dashboards_read,metrics_read"),
+            vec!["dashboards_read", "metrics_read"]
+        );
+    }
+
+    #[test]
+    fn test_parse_scopes_with_spaces() {
+        assert_eq!(
+            parse_scopes(" dashboards_read , metrics_read "),
+            vec!["dashboards_read", "metrics_read"]
+        );
+    }
+
+    #[test]
+    fn test_parse_scopes_empty() {
+        assert!(parse_scopes("").is_empty());
+        assert!(parse_scopes("  ").is_empty());
+    }
+
+    #[test]
+    fn test_parse_scopes_single() {
+        assert_eq!(parse_scopes("org_management"), vec!["org_management"]);
+    }
+
+    #[test]
+    fn test_file_config_profiles_scopes() {
+        let yaml = r#"
+profiles:
+  my-org:
+    scopes: teams_manage,org_management
+  read-only-org:
+    scopes: dashboards_read,metrics_read
+"#;
+        let fc: FileConfig = serde_norway::from_str(yaml).unwrap();
+        let profiles = fc.profiles.unwrap();
+        assert_eq!(
+            profiles["my-org"].scopes.as_deref(),
+            Some("teams_manage,org_management")
+        );
+        assert_eq!(
+            profiles["read-only-org"].scopes.as_deref(),
+            Some("dashboards_read,metrics_read")
+        );
+    }
+
+    #[test]
+    fn test_file_config_top_level_scopes() {
+        let yaml = "scopes: dashboards_read,monitors_read\n";
+        let fc: FileConfig = serde_norway::from_str(yaml).unwrap();
+        assert_eq!(fc.scopes.as_deref(), Some("dashboards_read,monitors_read"));
+    }
+
+    // --- resolve_token (auto-refresh logic) ---------------------------------
+
+    use crate::auth::types::{ClientCredentials, TokenSet};
+
+    fn make_token_set(issued_ago_secs: i64, expires_in: i64, refresh: &str) -> TokenSet {
+        TokenSet {
+            access_token: "old-access-token".into(),
+            refresh_token: refresh.into(),
+            token_type: "Bearer".into(),
+            expires_in,
+            issued_at: chrono::Utc::now().timestamp() - issued_ago_secs,
+            scope: String::new(),
+            client_id: String::new(),
+        }
+    }
+
+    fn make_creds() -> ClientCredentials {
+        ClientCredentials {
+            client_id: "test-client-id".into(),
+            client_name: "test-client".into(),
+            redirect_uris: vec![],
+            registered_at: 0,
+            site: "datadoghq.com".into(),
+        }
+    }
+
+    fn make_refreshed_token_set() -> TokenSet {
+        TokenSet {
+            access_token: "fresh-access-token".into(),
+            refresh_token: "fresh-refresh-token".into(),
+            token_type: "Bearer".into(),
+            expires_in: 3600,
+            issued_at: chrono::Utc::now().timestamp(),
+            scope: String::new(),
+            client_id: "test-client-id".into(),
+        }
+    }
+
+    #[test]
+    fn test_resolve_token_valid_token() {
+        let tokens = make_token_set(0, 3600, "refresh");
+        let creds = make_creds();
+        let result = super::resolve_token(tokens, Some(&creds), |_, _| {
+            panic!("refresh_fn should not be called for valid token");
+        });
+        match result {
+            super::ResolvedToken::Valid(t) => assert_eq!(t, "old-access-token"),
+            _ => panic!("expected Valid"),
+        }
+    }
+
+    #[test]
+    fn test_resolve_token_expired_no_refresh_token() {
+        let tokens = make_token_set(7200, 3600, "");
+        let creds = make_creds();
+        let result = super::resolve_token(tokens, Some(&creds), |_, _| {
+            panic!("refresh_fn should not be called without refresh token");
+        });
+        assert!(matches!(result, super::ResolvedToken::Expired));
+    }
+
+    #[test]
+    fn test_resolve_token_expired_no_client_creds() {
+        let tokens = make_token_set(7200, 3600, "refresh");
+        let result = super::resolve_token(tokens, None, |_, _| {
+            panic!("refresh_fn should not be called without client credentials");
+        });
+        assert!(matches!(result, super::ResolvedToken::Expired));
+    }
+
+    #[test]
+    fn test_resolve_token_expired_refresh_fails() {
+        let tokens = make_token_set(7200, 3600, "refresh");
+        let creds = make_creds();
+        let result = super::resolve_token(tokens, Some(&creds), |_, _| None);
+        assert!(matches!(result, super::ResolvedToken::Expired));
+    }
+
+    #[test]
+    fn test_resolve_token_expired_refresh_succeeds() {
+        let tokens = make_token_set(7200, 3600, "refresh");
+        let creds = make_creds();
+        let result = super::resolve_token(tokens, Some(&creds), |rt, c| {
+            assert_eq!(rt, "refresh");
+            assert_eq!(c.client_id, "test-client-id");
+            Some(make_refreshed_token_set())
+        });
+        match result {
+            super::ResolvedToken::Refreshed(t) => {
+                assert_eq!(t.access_token, "fresh-access-token");
+                assert_eq!(t.refresh_token, "fresh-refresh-token");
+            }
+            _ => panic!("expected Refreshed"),
+        }
+    }
+
+    #[test]
+    fn test_resolve_token_near_expiry_triggers_refresh() {
+        let tokens = make_token_set(3400, 3600, "refresh"); // 200s left < 300s buffer
+        let creds = make_creds();
+        let result =
+            super::resolve_token(
+                tokens,
+                Some(&creds),
+                |_, _| Some(make_refreshed_token_set()),
+            );
+        assert!(matches!(result, super::ResolvedToken::Refreshed(_)));
     }
 }
