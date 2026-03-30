@@ -2154,6 +2154,8 @@ enum LogActions {
         index: Option<String>,
         #[arg(long, help = "Storage tier: indexes, online-archives, or flex")]
         storage: Option<String>,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
     /// List logs (v2 API)
     List {
@@ -2173,6 +2175,8 @@ enum LogActions {
         sort: String,
         #[arg(long, help = "Storage tier: indexes, online-archives, or flex")]
         storage: Option<String>,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
     /// Query logs (v2 API)
     Query {
@@ -2194,6 +2198,8 @@ enum LogActions {
         storage: Option<String>,
         #[arg(long, help = "Timezone for timestamps")]
         timezone: Option<String>,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
     /// Aggregate logs (v2 API)
     Aggregate {
@@ -2290,6 +2296,8 @@ enum IncidentActions {
     List {
         #[arg(long, default_value_t = 50)]
         limit: i64,
+        #[arg(long, help = "Pagination offset from previous response")]
+        page_offset: Option<i64>,
     },
     /// Get incident details
     Get { incident_id: String },
@@ -2693,6 +2701,8 @@ enum EventActions {
         to: String,
         #[arg(long, default_value_t = 100, help = "Maximum results")]
         limit: i32,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
     /// Get event details
     Get { event_id: i64 },
@@ -2988,6 +2998,8 @@ enum AuditLogActions {
         to: String,
         #[arg(long, default_value_t = 100, help = "Maximum results")]
         limit: i32,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
     /// Search audit logs
     Search {
@@ -2999,6 +3011,8 @@ enum AuditLogActions {
         to: String,
         #[arg(long, default_value_t = 100, help = "Maximum results")]
         limit: i32,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
 }
 
@@ -3075,6 +3089,8 @@ enum SecuritySignalActions {
         limit: i32,
         #[arg(long, help = "Sort field: severity, status, timestamp")]
         sort: Option<String>,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
 }
 
@@ -3086,6 +3102,8 @@ enum SecurityFindingActions {
         query: Option<String>,
         #[arg(long, default_value_t = 100)]
         limit: i64,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
 }
 
@@ -3158,6 +3176,8 @@ enum SeatsUserActions {
         product: String,
         #[arg(long, default_value_t = 100, help = "Page limit")]
         limit: i32,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
     /// Assign seats to users
     Assign {
@@ -3548,7 +3568,12 @@ enum CaseNotificationRuleActions {
 #[derive(Subcommand)]
 enum ServiceCatalogActions {
     /// List services
-    List,
+    List {
+        #[arg(long, help = "Number of items per page")]
+        page_size: Option<i64>,
+        #[arg(long, help = "Page number (0-indexed)")]
+        page_number: Option<i64>,
+    },
     /// Get service details
     Get { service_name: String },
 }
@@ -3781,6 +3806,8 @@ enum RumActions {
         to: String,
         #[arg(long, default_value_t = 100)]
         limit: i32,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
     /// Query RUM session replay data
     Sessions {
@@ -3856,6 +3883,8 @@ enum RumSessionActions {
         to: String,
         #[arg(long, default_value_t = 100)]
         limit: i32,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
     /// List RUM sessions
     List {
@@ -3865,6 +3894,8 @@ enum RumSessionActions {
         to: String,
         #[arg(long, default_value_t = 100)]
         limit: i32,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
 }
 
@@ -3980,6 +4011,8 @@ enum CicdPipelineActions {
         branch: Option<String>,
         #[arg(long, help = "Filter by pipeline name")]
         pipeline_name: Option<String>,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
     /// Get pipeline details
     Get {
@@ -4000,6 +4033,8 @@ enum CicdTestActions {
         to: String,
         #[arg(long, default_value_t = 50, help = "Maximum results")]
         limit: i32,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
     /// Search CI test events
     Search {
@@ -4011,6 +4046,8 @@ enum CicdTestActions {
         to: String,
         #[arg(long, default_value_t = 50, help = "Maximum results")]
         limit: i32,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
     /// Aggregate CI test events
     Aggregate {
@@ -4043,6 +4080,8 @@ enum CicdEventActions {
         limit: i32,
         #[arg(long, default_value = "desc", help = "Sort order (asc or desc)")]
         sort: String,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
     /// Aggregate CI/CD events
     Aggregate {
@@ -4731,6 +4770,8 @@ enum ContainerActions {
         /// Maximum number of results returned
         #[arg(long)]
         page_size: Option<i32>,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
     /// Manage container images
     Images {
@@ -4755,6 +4796,8 @@ enum ContainerImageActions {
         /// Maximum number of results returned
         #[arg(long)]
         page_size: Option<i32>,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
 }
 
@@ -5106,6 +5149,8 @@ enum ObsPipelinesActions {
             help = "Maximum number of pipelines to return"
         )]
         limit: i64,
+        #[arg(long, help = "Pagination offset from previous response")]
+        page_offset: Option<i64>,
     },
     /// Get pipeline details
     Get { pipeline_id: String },
@@ -5306,6 +5351,8 @@ enum ReferenceTablesActions {
             help = "Maximum number of tables to return"
         )]
         limit: i64,
+        #[arg(long, help = "Pagination offset from previous response")]
+        page_offset: Option<i64>,
     },
     /// Get a reference table by ID
     Get {
@@ -5378,6 +5425,8 @@ enum TracesActions {
             help = "Sort order: timestamp or -timestamp"
         )]
         sort: String,
+        #[arg(long, help = "Pagination cursor from previous response")]
+        cursor: Option<String>,
     },
     /// Compute aggregated stats over spans
     ///
@@ -6470,8 +6519,10 @@ async fn main_inner() -> anyhow::Result<()> {
                     sort,
                     index: _,
                     storage,
+                    cursor,
                 } => {
-                    commands::logs::search(&cfg, query, from, to, limit, sort, storage).await?;
+                    commands::logs::search(&cfg, query, from, to, limit, sort, storage, cursor)
+                        .await?;
                 }
                 LogActions::List {
                     query,
@@ -6480,8 +6531,10 @@ async fn main_inner() -> anyhow::Result<()> {
                     limit,
                     sort,
                     storage,
+                    cursor,
                 } => {
-                    commands::logs::list(&cfg, query, from, to, limit, sort, storage).await?;
+                    commands::logs::list(&cfg, query, from, to, limit, sort, storage, cursor)
+                        .await?;
                 }
                 LogActions::Query {
                     query,
@@ -6491,8 +6544,10 @@ async fn main_inner() -> anyhow::Result<()> {
                     sort,
                     storage,
                     timezone: _,
+                    cursor,
                 } => {
-                    commands::logs::query(&cfg, query, from, to, limit, sort, storage).await?;
+                    commands::logs::query(&cfg, query, from, to, limit, sort, storage, cursor)
+                        .await?;
                 }
                 LogActions::Aggregate {
                     query,
@@ -6564,8 +6619,8 @@ async fn main_inner() -> anyhow::Result<()> {
         Commands::Incidents { action } => {
             cfg.validate_auth()?;
             match action {
-                IncidentActions::List { limit } => {
-                    commands::incidents::list(&cfg, limit).await?;
+                IncidentActions::List { limit, page_offset } => {
+                    commands::incidents::list(&cfg, limit, page_offset).await?;
                 }
                 IncidentActions::Get { incident_id } => {
                     commands::incidents::get(&cfg, &incident_id).await?;
@@ -6782,8 +6837,9 @@ async fn main_inner() -> anyhow::Result<()> {
                     from,
                     to,
                     limit,
+                    cursor,
                 } => {
-                    commands::events::search(&cfg, query, from, to, limit).await?;
+                    commands::events::search(&cfg, query, from, to, limit, cursor).await?;
                 }
                 EventActions::Get { event_id } => {
                     commands::events::get(&cfg, event_id).await?;
@@ -6830,8 +6886,12 @@ async fn main_inner() -> anyhow::Result<()> {
                 },
                 UserActions::Seats { action } => match action {
                     SeatsActions::Users { action } => match action {
-                        SeatsUserActions::List { product, limit } => {
-                            commands::seats::users_list(&cfg, &product, limit).await?;
+                        SeatsUserActions::List {
+                            product,
+                            limit,
+                            cursor,
+                        } => {
+                            commands::seats::users_list(&cfg, &product, limit, cursor).await?;
                         }
                         SeatsUserActions::Assign { file } => {
                             commands::seats::users_assign(&cfg, &file).await?;
@@ -6886,16 +6946,22 @@ async fn main_inner() -> anyhow::Result<()> {
         Commands::AuditLogs { action } => {
             cfg.validate_auth()?;
             match action {
-                AuditLogActions::List { from, to, limit } => {
-                    commands::audit_logs::list(&cfg, from, to, limit).await?;
+                AuditLogActions::List {
+                    from,
+                    to,
+                    limit,
+                    cursor,
+                } => {
+                    commands::audit_logs::list(&cfg, from, to, limit, cursor).await?;
                 }
                 AuditLogActions::Search {
                     query,
                     from,
                     to,
                     limit,
+                    cursor,
                 } => {
-                    commands::audit_logs::search(&cfg, query, from, to, limit).await?;
+                    commands::audit_logs::search(&cfg, query, from, to, limit, cursor).await?;
                 }
             }
         }
@@ -6920,14 +6986,20 @@ async fn main_inner() -> anyhow::Result<()> {
                         from,
                         to,
                         limit,
+                        cursor,
                         ..
                     } => {
-                        commands::security::signals_search(&cfg, query, from, to, limit).await?;
+                        commands::security::signals_search(&cfg, query, from, to, limit, cursor)
+                            .await?;
                     }
                 },
                 SecurityActions::Findings { action } => match action {
-                    SecurityFindingActions::Search { query, limit } => {
-                        commands::security::findings_search(&cfg, query, limit).await?;
+                    SecurityFindingActions::Search {
+                        query,
+                        limit,
+                        cursor,
+                    } => {
+                        commands::security::findings_search(&cfg, query, limit, cursor).await?;
                     }
                 },
                 SecurityActions::ContentPacks { action } => match action {
@@ -7199,7 +7271,10 @@ async fn main_inner() -> anyhow::Result<()> {
         Commands::ServiceCatalog { action } => {
             cfg.validate_auth()?;
             match action {
-                ServiceCatalogActions::List => commands::service_catalog::list(&cfg).await?,
+                ServiceCatalogActions::List {
+                    page_size,
+                    page_number,
+                } => commands::service_catalog::list(&cfg, page_size, page_number).await?,
                 ServiceCatalogActions::Get { service_name } => {
                     commands::service_catalog::get(&cfg, &service_name).await?;
                 }
@@ -7348,8 +7423,13 @@ async fn main_inner() -> anyhow::Result<()> {
                         commands::rum::apps_delete(&cfg, &app_id).await?;
                     }
                 },
-                RumActions::Events { from, to, limit } => {
-                    commands::rum::events_list(&cfg, from, to, limit).await?;
+                RumActions::Events {
+                    from,
+                    to,
+                    limit,
+                    cursor,
+                } => {
+                    commands::rum::events_list(&cfg, from, to, limit, cursor).await?;
                 }
                 RumActions::Sessions { action } => match action {
                     RumSessionActions::Search {
@@ -7357,11 +7437,18 @@ async fn main_inner() -> anyhow::Result<()> {
                         from,
                         to,
                         limit,
+                        cursor,
                     } => {
-                        commands::rum::sessions_search(&cfg, query, from, to, limit).await?;
+                        commands::rum::sessions_search(&cfg, query, from, to, limit, cursor)
+                            .await?;
                     }
-                    RumSessionActions::List { from, to, limit } => {
-                        commands::rum::sessions_list(&cfg, from, to, limit).await?;
+                    RumSessionActions::List {
+                        from,
+                        to,
+                        limit,
+                        cursor,
+                    } => {
+                        commands::rum::sessions_list(&cfg, from, to, limit, cursor).await?;
                     }
                 },
                 RumActions::Metrics { action } => match action {
@@ -7424,9 +7511,11 @@ async fn main_inner() -> anyhow::Result<()> {
                         from,
                         to,
                         limit,
+                        cursor,
                         ..
                     } => {
-                        commands::cicd::pipelines_list(&cfg, query, from, to, limit).await?;
+                        commands::cicd::pipelines_list(&cfg, query, from, to, limit, cursor)
+                            .await?;
                     }
                     CicdPipelineActions::Get { pipeline_id } => {
                         commands::cicd::pipelines_get(&cfg, &pipeline_id).await?;
@@ -7438,16 +7527,18 @@ async fn main_inner() -> anyhow::Result<()> {
                         from,
                         to,
                         limit,
+                        cursor,
                     } => {
-                        commands::cicd::tests_list(&cfg, query, from, to, limit).await?;
+                        commands::cicd::tests_list(&cfg, query, from, to, limit, cursor).await?;
                     }
                     CicdTestActions::Search {
                         query,
                         from,
                         to,
                         limit,
+                        cursor,
                     } => {
-                        commands::cicd::tests_search(&cfg, query, from, to, limit).await?;
+                        commands::cicd::tests_search(&cfg, query, from, to, limit, cursor).await?;
                     }
                     CicdTestActions::Aggregate {
                         query, from, to, ..
@@ -7461,9 +7552,10 @@ async fn main_inner() -> anyhow::Result<()> {
                         from,
                         to,
                         limit,
+                        cursor,
                         ..
                     } => {
-                        commands::cicd::events_search(&cfg, query, from, to, limit).await?;
+                        commands::cicd::events_search(&cfg, query, from, to, limit, cursor).await?;
                     }
                     CicdEventActions::Aggregate {
                         query, from, to, ..
@@ -7948,9 +8040,17 @@ async fn main_inner() -> anyhow::Result<()> {
                     group_by,
                     sort,
                     page_size,
+                    cursor,
                 } => {
-                    commands::containers::list(&cfg, filter_tags, group_by, sort, page_size)
-                        .await?;
+                    commands::containers::list(
+                        &cfg,
+                        filter_tags,
+                        group_by,
+                        sort,
+                        page_size,
+                        cursor,
+                    )
+                    .await?;
                 }
                 ContainerActions::Images { action } => match action {
                     ContainerImageActions::List {
@@ -7958,6 +8058,7 @@ async fn main_inner() -> anyhow::Result<()> {
                         group_by,
                         sort,
                         page_size,
+                        cursor,
                     } => {
                         commands::containers::images_list(
                             &cfg,
@@ -7965,6 +8066,7 @@ async fn main_inner() -> anyhow::Result<()> {
                             group_by,
                             sort,
                             page_size,
+                            cursor,
                         )
                         .await?;
                     }
@@ -8198,8 +8300,8 @@ async fn main_inner() -> anyhow::Result<()> {
         Commands::ObsPipelines { action } => {
             cfg.validate_auth()?;
             match action {
-                ObsPipelinesActions::List { limit } => {
-                    commands::obs_pipelines::list(&cfg, limit).await?;
+                ObsPipelinesActions::List { limit, page_offset } => {
+                    commands::obs_pipelines::list(&cfg, limit, page_offset).await?;
                 }
                 ObsPipelinesActions::Get { pipeline_id } => {
                     commands::obs_pipelines::get(&cfg, &pipeline_id).await?;
@@ -8235,8 +8337,9 @@ async fn main_inner() -> anyhow::Result<()> {
                     to,
                     limit,
                     sort,
+                    cursor,
                 } => {
-                    commands::traces::search(&cfg, query, from, to, limit, sort).await?;
+                    commands::traces::search(&cfg, query, from, to, limit, sort, cursor).await?;
                 }
                 TracesActions::Aggregate {
                     query,
@@ -8605,8 +8708,8 @@ async fn main_inner() -> anyhow::Result<()> {
         Commands::ReferenceTables { action } => {
             cfg.validate_auth()?;
             match action {
-                ReferenceTablesActions::List { limit } => {
-                    commands::reference_tables::list(&cfg, limit).await?;
+                ReferenceTablesActions::List { limit, page_offset } => {
+                    commands::reference_tables::list(&cfg, limit, page_offset).await?;
                 }
                 ReferenceTablesActions::Get { table_id } => {
                     commands::reference_tables::get(&cfg, &table_id).await?;

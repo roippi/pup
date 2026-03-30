@@ -105,6 +105,7 @@ pub async fn search(
     to: String,
     limit: i32,
     sort: String,
+    cursor: Option<String>,
 ) -> Result<()> {
     validate_sort(&sort)?;
 
@@ -124,6 +125,11 @@ pub async fn search(
         _ => SpansSort::TIMESTAMP_DESCENDING,
     };
 
+    let mut page = SpansListRequestPage::new().limit(page_limit);
+    if let Some(c) = cursor {
+        page = page.cursor(c);
+    }
+
     let body = SpansListRequest::new().data(
         SpansListRequestData::new()
             .type_(SpansListRequestType::SEARCH_REQUEST)
@@ -135,7 +141,7 @@ pub async fn search(
                             .from(from_ms.to_string())
                             .to(to_ms.to_string()),
                     )
-                    .page(SpansListRequestPage::new().limit(page_limit))
+                    .page(page)
                     .sort(spans_sort),
             ),
     );
@@ -164,7 +170,14 @@ pub async fn search(
     } else {
         None
     };
-    formatter::format_and_print(&resp, &cfg.output_format, cfg.agent_mode, meta.as_ref())?;
+    let raw = serde_json::to_value(&resp)?;
+    formatter::format_and_print(
+        &resp,
+        &cfg.output_format,
+        cfg.agent_mode,
+        meta.as_ref(),
+        Some(&raw),
+    )?;
     Ok(())
 }
 
@@ -227,7 +240,13 @@ pub async fn aggregate(
     } else {
         None
     };
-    formatter::format_and_print(&resp, &cfg.output_format, cfg.agent_mode, meta.as_ref())?;
+    formatter::format_and_print(
+        &resp,
+        &cfg.output_format,
+        cfg.agent_mode,
+        meta.as_ref(),
+        None,
+    )?;
     Ok(())
 }
 

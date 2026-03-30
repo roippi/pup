@@ -26,6 +26,7 @@ pub async fn pipelines_list(
     from: String,
     to: String,
     limit: i32,
+    cursor: Option<String>,
 ) -> Result<()> {
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
@@ -47,9 +48,14 @@ pub async fn pipelines_list(
         filter = filter.query(q);
     }
 
+    let mut page = CIAppQueryPageOptions::new().limit(limit);
+    if let Some(c) = cursor {
+        page = page.cursor(c);
+    }
+
     let body = CIAppPipelineEventsRequest::new()
         .filter(filter)
-        .page(CIAppQueryPageOptions::new().limit(limit))
+        .page(page)
         .sort(CIAppSort::TIMESTAMP_DESCENDING);
 
     let params = SearchCIAppPipelineEventsOptionalParams::default().body(body);
@@ -57,7 +63,8 @@ pub async fn pipelines_list(
         .search_ci_app_pipeline_events(params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to list pipelines: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
 
 pub async fn tests_list(
@@ -66,6 +73,7 @@ pub async fn tests_list(
     from: String,
     to: String,
     limit: i32,
+    cursor: Option<String>,
 ) -> Result<()> {
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
@@ -85,12 +93,16 @@ pub async fn tests_list(
     if let Some(q) = query {
         params = params.filter_query(q);
     }
+    if let Some(c) = cursor {
+        params = params.page_cursor(c);
+    }
 
     let resp = api
         .list_ci_app_test_events(params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to list tests: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
 
 pub async fn events_search(
@@ -99,6 +111,7 @@ pub async fn events_search(
     from: String,
     to: String,
     limit: i32,
+    cursor: Option<String>,
 ) -> Result<()> {
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
@@ -120,9 +133,14 @@ pub async fn events_search(
         .to(to_str)
         .query(query);
 
+    let mut page = CIAppQueryPageOptions::new().limit(limit);
+    if let Some(c) = cursor {
+        page = page.cursor(c);
+    }
+
     let body = CIAppPipelineEventsRequest::new()
         .filter(filter)
-        .page(CIAppQueryPageOptions::new().limit(limit))
+        .page(page)
         .sort(CIAppSort::TIMESTAMP_DESCENDING);
 
     let params = SearchCIAppPipelineEventsOptionalParams::default().body(body);
@@ -130,7 +148,8 @@ pub async fn events_search(
         .search_ci_app_pipeline_events(params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to search pipeline events: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
 
 pub async fn events_aggregate(cfg: &Config, query: String, from: String, to: String) -> Result<()> {
@@ -170,6 +189,7 @@ pub async fn tests_search(
     from: String,
     to: String,
     limit: i32,
+    cursor: Option<String>,
 ) -> Result<()> {
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
@@ -191,9 +211,14 @@ pub async fn tests_search(
         .to(to_str)
         .query(query);
 
+    let mut page = CIAppQueryPageOptions::new().limit(limit);
+    if let Some(c) = cursor {
+        page = page.cursor(c);
+    }
+
     let body = CIAppTestEventsRequest::new()
         .filter(filter)
-        .page(CIAppQueryPageOptions::new().limit(limit))
+        .page(page)
         .sort(CIAppSort::TIMESTAMP_DESCENDING);
 
     let params = SearchCIAppTestEventsOptionalParams::default().body(body);
@@ -201,7 +226,8 @@ pub async fn tests_search(
         .search_ci_app_test_events(params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to search test events: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
 
 pub async fn tests_aggregate(cfg: &Config, query: String, from: String, to: String) -> Result<()> {

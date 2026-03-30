@@ -15,14 +15,23 @@ fn make_api(cfg: &Config) -> SeatsAPI {
     }
 }
 
-pub async fn users_list(cfg: &Config, product: &str, limit: i32) -> Result<()> {
+pub async fn users_list(
+    cfg: &Config,
+    product: &str,
+    limit: i32,
+    cursor: Option<String>,
+) -> Result<()> {
     let api = make_api(cfg);
-    let params = GetSeatsUsersOptionalParams::default().page_limit(limit);
+    let mut params = GetSeatsUsersOptionalParams::default().page_limit(limit);
+    if let Some(c) = cursor {
+        params = params.page_cursor(c);
+    }
     let resp = api
         .get_seats_users(product.to_string(), params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to list seats users: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
 
 pub async fn users_assign(cfg: &Config, file: &str) -> Result<()> {

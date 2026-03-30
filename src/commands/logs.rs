@@ -193,6 +193,7 @@ fn parse_logs_sort(sort: &str) -> LogsSort {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn search(
     cfg: &Config,
     query: String,
@@ -201,6 +202,7 @@ pub async fn search(
     limit: i32,
     sort: String,
     storage: Option<String>,
+    cursor: Option<String>,
 ) -> Result<()> {
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
@@ -221,9 +223,14 @@ pub async fn search(
         filter = filter.storage_tier(tier);
     }
 
+    let mut page = LogsListRequestPage::new().limit(limit);
+    if let Some(c) = cursor {
+        page = page.cursor(c);
+    }
+
     let body = LogsListRequest::new()
         .filter(filter)
-        .page(LogsListRequestPage::new().limit(limit))
+        .page(page)
         .sort(parse_logs_sort(&sort));
 
     let params = ListLogsOptionalParams::default().body(body);
@@ -252,11 +259,21 @@ pub async fn search(
     } else {
         None
     };
-    formatter::format_and_print(&resp, &cfg.output_format, cfg.agent_mode, meta.as_ref())?;
+    let raw = serde_json::to_value(&resp)?;
+    formatter::format_and_print(
+        &resp,
+        &cfg.output_format,
+        cfg.agent_mode,
+        meta.as_ref(),
+        Some(&raw),
+    )?;
     Ok(())
 }
 
+
+
 /// Alias for `search` with the same interface.
+#[allow(clippy::too_many_arguments)]
 pub async fn list(
     cfg: &Config,
     query: String,
@@ -265,11 +282,13 @@ pub async fn list(
     limit: i32,
     sort: String,
     storage: Option<String>,
+    cursor: Option<String>,
 ) -> Result<()> {
-    search(cfg, query, from, to, limit, sort, storage).await
+    search(cfg, query, from, to, limit, sort, storage, cursor).await
 }
 
 /// Alias for `search` with the same interface.
+#[allow(clippy::too_many_arguments)]
 pub async fn query(
     cfg: &Config,
     query: String,
@@ -278,8 +297,9 @@ pub async fn query(
     limit: i32,
     sort: String,
     storage: Option<String>,
+    cursor: Option<String>,
 ) -> Result<()> {
-    search(cfg, query, from, to, limit, sort, storage).await
+    search(cfg, query, from, to, limit, sort, storage, cursor).await
 }
 
 pub async fn aggregate(cfg: &Config, args: AggregateArgs) -> Result<()> {

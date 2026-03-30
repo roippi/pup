@@ -28,16 +28,20 @@ fn make_api(cfg: &Config) -> IncidentsAPI {
 // Core incident operations
 // ---------------------------------------------------------------------------
 
-pub async fn list(cfg: &Config, limit: i64) -> Result<()> {
+pub async fn list(cfg: &Config, limit: i64, page_offset: Option<i64>) -> Result<()> {
     let api = make_api(cfg);
-    let params = SearchIncidentsOptionalParams::default()
+    let mut params = SearchIncidentsOptionalParams::default()
         .page_size(limit)
         .sort(IncidentSearchSortOrder::CREATED_DESCENDING);
+    if let Some(o) = page_offset {
+        params = params.page_offset(o);
+    }
     let resp = api
         .search_incidents("state:active".to_string(), params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to list incidents: {:?}", e))?;
-    formatter::output(cfg, &resp)?;
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)?;
     Ok(())
 }
 

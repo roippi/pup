@@ -16,13 +16,158 @@ pub struct Metadata {
     pub next_action: Option<String>,
 }
 
-/// Agent mode wrapper: { status, data, metadata }
+/// Pagination type for serialization.
+#[derive(Debug, Clone, Default, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PaginationType {
+    Cursor,
+    Offset,
+    PageNumber,
+    #[default]
+    None,
+}
+
+/// Pagination metadata for agent mode envelope.
+#[derive(Default, Debug, Clone, Serialize)]
+pub struct PaginationInfo {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cursor: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub page_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_page: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total_count: Option<i64>,
+    pub has_next_page: bool,
+    #[serde(rename = "type")]
+    pub pagination_type: PaginationType,
+}
+
+/// Extract pagination info from raw API response JSON.
+/// Returns None if no pagination metadata is found.
+pub fn extract_pagination(raw: &serde_json::Value) -> Option<PaginationInfo> {
+    // 1. meta.page.after (most common V2 cursor)
+    if let Some(val) = raw.pointer("/meta/page/after") {
+        let cursor = val.as_str().unwrap_or("").to_string();
+        let has_next = !cursor.is_empty();
+        return Some(PaginationInfo {
+            cursor: if has_next { Some(cursor) } else { None },
+            has_next_page: has_next,
+            pagination_type: PaginationType::Cursor,
+            ..Default::default()
+        });
+    }
+
+    // 2. meta.page.cursor (security findings)
+    if let Some(val) = raw.pointer("/meta/page/cursor") {
+        let cursor = val.as_str().unwrap_or("").to_string();
+        let has_next = !cursor.is_empty();
+        return Some(PaginationInfo {
+            cursor: if has_next { Some(cursor) } else { None },
+            has_next_page: has_next,
+            pagination_type: PaginationType::Cursor,
+            ..Default::default()
+        });
+    }
+
+    // 3. meta.pagination.next_cursor (containers)
+    if let Some(val) = raw.pointer("/meta/pagination/next_cursor") {
+        let cursor = val.as_str().unwrap_or("").to_string();
+        let has_next = !cursor.is_empty();
+        return Some(PaginationInfo {
+            cursor: if has_next { Some(cursor) } else { None },
+            has_next_page: has_next,
+            pagination_type: PaginationType::Cursor,
+            ..Default::default()
+        });
+    }
+
+    // 4. meta.next_cursor (seats users)
+    if let Some(val) = raw.pointer("/meta/next_cursor") {
+        let cursor = val.as_str().unwrap_or("").to_string();
+        let has_next = !cursor.is_empty();
+        return Some(PaginationInfo {
+            cursor: if has_next { Some(cursor) } else { None },
+            has_next_page: has_next,
+            pagination_type: PaginationType::Cursor,
+            ..Default::default()
+        });
+    }
+
+    // 5. meta.pagination.next_offset (incidents)
+    if let Some(offset) = raw
+        .pointer("/meta/pagination/next_offset")
+        .and_then(|v| v.as_i64())
+    {
+        let has_next = offset > 0;
+        return Some(PaginationInfo {
+            next_offset: if has_next { Some(offset) } else { None },
+            has_next_page: has_next,
+            pagination_type: PaginationType::Offset,
+            ..Default::default()
+        });
+    }
+
+    // 6. meta.page.next_offset (reference-tables)
+    if let Some(offset) = raw
+        .pointer("/meta/page/next_offset")
+        .and_then(|v| v.as_i64())
+    {
+        let has_next = offset > 0;
+        return Some(PaginationInfo {
+            next_offset: if has_next { Some(offset) } else { None },
+            has_next_page: has_next,
+            pagination_type: PaginationType::Offset,
+            ..Default::default()
+        });
+    }
+
+    // 7. meta.count (obs-pipelines — total only, no next_offset)
+    if let Some(count) = raw.pointer("/meta/count").and_then(|v| v.as_i64()) {
+        return Some(PaginationInfo {
+            total_count: Some(count),
+            has_next_page: false, // caller must set based on request offset+limit vs count
+            pagination_type: PaginationType::Offset,
+            ..Default::default()
+        });
+    }
+
+    // 8. metadata.page + metadata.page_count (V1 monitors search)
+    if let (Some(page), Some(page_count)) = (
+        raw.pointer("/metadata/page").and_then(|v| v.as_i64()),
+        raw.pointer("/metadata/page_count").and_then(|v| v.as_i64()),
+    ) {
+        let per_page = raw.pointer("/metadata/per_page").and_then(|v| v.as_i64());
+        let total = raw
+            .pointer("/metadata/total_count")
+            .and_then(|v| v.as_i64());
+        return Some(PaginationInfo {
+            page: Some(page),
+            page_count: Some(page_count),
+            per_page,
+            total_count: total,
+            has_next_page: page + 1 < page_count,
+            pagination_type: PaginationType::PageNumber,
+            ..Default::default()
+        });
+    }
+
+    None
+}
+
+/// Agent mode wrapper: { status, data, metadata, pagination }
 #[derive(Serialize)]
 struct AgentEnvelope<'a, T: Serialize> {
     status: &'static str,
     data: &'a T,
     #[serde(skip_serializing_if = "Option::is_none")]
     metadata: Option<&'a Metadata>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pagination: Option<PaginationInfo>,
 }
 
 /// Recursively sort all JSON object keys alphabetically.
@@ -57,6 +202,7 @@ pub fn format_and_print<T: Serialize>(
     format: &OutputFormat,
     agent_mode: bool,
     meta: Option<&Metadata>,
+    raw_response: Option<&serde_json::Value>,
 ) -> Result<()> {
     if agent_mode && *format == OutputFormat::Json {
         let sorted_data = sort_json_value(serde_json::to_value(data)?);
@@ -66,10 +212,12 @@ pub fn format_and_print<T: Serialize>(
             serde_json::Value::Object(obj) if obj.contains_key("data") => obj["data"].clone(),
             _ => sorted_data.clone(),
         };
+        let pagination = raw_response.and_then(extract_pagination);
         let envelope = AgentEnvelope {
             status: "success",
             data: &effective_data,
             metadata: meta,
+            pagination,
         };
         let json = go_html_escape(&serde_json::to_string_pretty(&envelope)?);
         println!("{json}");
@@ -87,7 +235,16 @@ pub fn format_and_print<T: Serialize>(
 
 /// Convenience: format and print using config settings (respects -o flag and agent mode).
 pub fn output<T: Serialize>(cfg: &crate::config::Config, data: &T) -> Result<()> {
-    format_and_print(data, &cfg.output_format, cfg.agent_mode, None)
+    format_and_print(data, &cfg.output_format, cfg.agent_mode, None, None)
+}
+
+/// Convenience: format and print with raw response for pagination extraction.
+pub fn output_with_raw<T: Serialize>(
+    cfg: &crate::config::Config,
+    data: &T,
+    raw: &serde_json::Value,
+) -> Result<()> {
+    format_and_print(data, &cfg.output_format, cfg.agent_mode, None, Some(raw))
 }
 
 pub fn print_json<T: Serialize>(data: &T) -> Result<()> {
@@ -789,21 +946,21 @@ mod tests {
     #[test]
     fn test_format_and_print_json() {
         let data = serde_json::json!({"name": "test"});
-        let result = format_and_print(&data, &OutputFormat::Json, false, None);
+        let result = format_and_print(&data, &OutputFormat::Json, false, None, None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_format_and_print_yaml() {
         let data = serde_json::json!({"name": "test"});
-        let result = format_and_print(&data, &OutputFormat::Yaml, false, None);
+        let result = format_and_print(&data, &OutputFormat::Yaml, false, None, None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_format_and_print_table() {
         let data = serde_json::json!([{"id": 1, "name": "test"}]);
-        let result = format_and_print(&data, &OutputFormat::Table, false, None);
+        let result = format_and_print(&data, &OutputFormat::Table, false, None, None);
         assert!(result.is_ok());
     }
 
@@ -816,14 +973,14 @@ mod tests {
             command: Some("test".into()),
             next_action: None,
         };
-        let result = format_and_print(&data, &OutputFormat::Json, true, Some(&meta));
+        let result = format_and_print(&data, &OutputFormat::Json, true, Some(&meta), None);
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_format_and_print_agent_mode_no_meta() {
         let data = serde_json::json!({"name": "test"});
-        let result = format_and_print(&data, &OutputFormat::Json, true, None);
+        let result = format_and_print(&data, &OutputFormat::Json, true, None, None);
         assert!(result.is_ok());
     }
 
@@ -831,7 +988,7 @@ mod tests {
     fn test_format_and_print_agent_mode_respects_yaml_flag() {
         // In agent mode, -o yaml should bypass the agent envelope and use YAML output.
         let data = serde_json::json!({"name": "test"});
-        let result = format_and_print(&data, &OutputFormat::Yaml, true, None);
+        let result = format_and_print(&data, &OutputFormat::Yaml, true, None, None);
         assert!(result.is_ok());
     }
 
@@ -839,7 +996,7 @@ mod tests {
     fn test_format_and_print_agent_mode_respects_table_flag() {
         // In agent mode, -o table should bypass the agent envelope and use table output.
         let data = serde_json::json!([{"id": 1, "name": "test"}]);
-        let result = format_and_print(&data, &OutputFormat::Table, true, None);
+        let result = format_and_print(&data, &OutputFormat::Table, true, None, None);
         assert!(result.is_ok());
     }
 
@@ -972,7 +1129,7 @@ mod tests {
     #[test]
     fn test_format_and_print_csv() {
         let data = serde_json::json!([{"id": 1, "name": "test"}]);
-        let result = format_and_print(&data, &OutputFormat::Csv, false, None);
+        let result = format_and_print(&data, &OutputFormat::Csv, false, None, None);
         assert!(result.is_ok());
     }
 
@@ -1049,7 +1206,207 @@ mod tests {
     #[test]
     fn test_format_and_print_tsv() {
         let data = serde_json::json!([{"id": 1, "name": "test"}]);
-        let result = format_and_print(&data, &OutputFormat::Tsv, false, None);
+        let result = format_and_print(&data, &OutputFormat::Tsv, false, None, None);
         assert!(result.is_ok());
+    }
+
+    // ---- extract_pagination tests ----
+
+    #[test]
+    fn test_extract_pagination_meta_page_after() {
+        let raw = serde_json::json!({
+            "data": [{"id": "1"}],
+            "meta": {"page": {"after": "eyJhZnRl..."}}
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert_eq!(info.pagination_type, PaginationType::Cursor);
+        assert_eq!(info.cursor, Some("eyJhZnRl...".to_string()));
+        assert!(info.has_next_page);
+    }
+
+    #[test]
+    fn test_extract_pagination_meta_page_after_empty() {
+        let raw = serde_json::json!({
+            "data": [],
+            "meta": {"page": {"after": ""}}
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert_eq!(info.pagination_type, PaginationType::Cursor);
+        assert_eq!(info.cursor, None);
+        assert!(!info.has_next_page);
+    }
+
+    #[test]
+    fn test_extract_pagination_meta_page_after_null() {
+        let raw = serde_json::json!({
+            "data": [],
+            "meta": {"page": {"after": null}}
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert!(!info.has_next_page);
+        assert_eq!(info.cursor, None);
+    }
+
+    #[test]
+    fn test_extract_pagination_meta_page_cursor() {
+        let raw = serde_json::json!({
+            "data": [{"id": "1"}],
+            "meta": {"page": {"cursor": "abc123"}}
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert_eq!(info.pagination_type, PaginationType::Cursor);
+        assert_eq!(info.cursor, Some("abc123".to_string()));
+        assert!(info.has_next_page);
+    }
+
+    #[test]
+    fn test_extract_pagination_meta_pagination_next_cursor() {
+        let raw = serde_json::json!({
+            "data": [{"id": "1"}],
+            "meta": {"pagination": {"next_cursor": "xyz789"}}
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert_eq!(info.pagination_type, PaginationType::Cursor);
+        assert_eq!(info.cursor, Some("xyz789".to_string()));
+        assert!(info.has_next_page);
+    }
+
+    #[test]
+    fn test_extract_pagination_meta_pagination_next_cursor_empty() {
+        let raw = serde_json::json!({
+            "data": [],
+            "meta": {"pagination": {"next_cursor": ""}}
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert!(!info.has_next_page);
+        assert_eq!(info.cursor, None);
+    }
+
+    #[test]
+    fn test_extract_pagination_meta_next_cursor() {
+        let raw = serde_json::json!({
+            "data": [{"id": "1"}],
+            "meta": {"next_cursor": "seats_cursor"}
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert_eq!(info.pagination_type, PaginationType::Cursor);
+        assert_eq!(info.cursor, Some("seats_cursor".to_string()));
+        assert!(info.has_next_page);
+    }
+
+    #[test]
+    fn test_extract_pagination_meta_next_cursor_empty() {
+        let raw = serde_json::json!({
+            "data": [],
+            "meta": {"next_cursor": ""}
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert!(!info.has_next_page);
+    }
+
+    #[test]
+    fn test_extract_pagination_meta_pagination_next_offset() {
+        let raw = serde_json::json!({
+            "data": [{"id": "1"}],
+            "meta": {"pagination": {"next_offset": 50}}
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert_eq!(info.pagination_type, PaginationType::Offset);
+        assert_eq!(info.next_offset, Some(50));
+        assert!(info.has_next_page);
+    }
+
+    #[test]
+    fn test_extract_pagination_meta_pagination_next_offset_zero() {
+        let raw = serde_json::json!({
+            "data": [],
+            "meta": {"pagination": {"next_offset": 0}}
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert_eq!(info.pagination_type, PaginationType::Offset);
+        assert!(!info.has_next_page);
+        assert_eq!(info.next_offset, None);
+    }
+
+    #[test]
+    fn test_extract_pagination_meta_pagination_next_offset_negative() {
+        let raw = serde_json::json!({
+            "data": [],
+            "meta": {"pagination": {"next_offset": -1}}
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert!(!info.has_next_page);
+        assert_eq!(info.next_offset, None);
+    }
+
+    #[test]
+    fn test_extract_pagination_meta_page_next_offset() {
+        let raw = serde_json::json!({
+            "data": [{"id": "1"}],
+            "meta": {"page": {"next_offset": 100}}
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert_eq!(info.pagination_type, PaginationType::Offset);
+        assert_eq!(info.next_offset, Some(100));
+        assert!(info.has_next_page);
+    }
+
+    #[test]
+    fn test_extract_pagination_meta_count() {
+        let raw = serde_json::json!({
+            "data": [{"id": "1"}],
+            "meta": {"count": 42}
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert_eq!(info.pagination_type, PaginationType::Offset);
+        assert_eq!(info.total_count, Some(42));
+        assert!(!info.has_next_page); // caller must determine
+    }
+
+    #[test]
+    fn test_extract_pagination_v1_monitors() {
+        let raw = serde_json::json!({
+            "monitors": [],
+            "metadata": {
+                "page": 0,
+                "page_count": 5,
+                "per_page": 30,
+                "total_count": 142
+            }
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert_eq!(info.pagination_type, PaginationType::PageNumber);
+        assert_eq!(info.page, Some(0));
+        assert_eq!(info.page_count, Some(5));
+        assert_eq!(info.per_page, Some(30));
+        assert_eq!(info.total_count, Some(142));
+        assert!(info.has_next_page);
+    }
+
+    #[test]
+    fn test_extract_pagination_v1_monitors_last_page() {
+        let raw = serde_json::json!({
+            "monitors": [],
+            "metadata": {
+                "page": 4,
+                "page_count": 5,
+                "per_page": 30,
+                "total_count": 142
+            }
+        });
+        let info = extract_pagination(&raw).unwrap();
+        assert!(!info.has_next_page);
+    }
+
+    #[test]
+    fn test_extract_pagination_none() {
+        let raw = serde_json::json!({"data": [{"id": "1"}]});
+        assert!(extract_pagination(&raw).is_none());
+    }
+
+    #[test]
+    fn test_extract_pagination_empty_object() {
+        let raw = serde_json::json!({});
+        assert!(extract_pagination(&raw).is_none());
     }
 }

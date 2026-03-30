@@ -16,14 +16,18 @@ fn make_api(cfg: &Config) -> ReferenceTablesAPI {
     }
 }
 
-pub async fn list(cfg: &Config, limit: i64) -> Result<()> {
+pub async fn list(cfg: &Config, limit: i64, page_offset: Option<i64>) -> Result<()> {
     let api = make_api(cfg);
-    let params = ListTablesOptionalParams::default().page_limit(limit);
+    let mut params = ListTablesOptionalParams::default().page_limit(limit);
+    if let Some(o) = page_offset {
+        params = params.page_offset(o);
+    }
     let resp = api
         .list_tables(params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to list reference tables: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
 
 pub async fn get(cfg: &Config, table_id: &str) -> Result<()> {

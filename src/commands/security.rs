@@ -77,6 +77,7 @@ pub async fn signals_search(
     from: String,
     to: String,
     limit: i32,
+    cursor: Option<String>,
 ) -> Result<()> {
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
@@ -89,6 +90,11 @@ pub async fn signals_search(
     let to_dt =
         chrono::DateTime::from_timestamp_millis(util::parse_time_to_unix_millis(&to)?).unwrap();
 
+    let mut page = SecurityMonitoringSignalListRequestPage::new().limit(limit);
+    if let Some(c) = cursor {
+        page = page.cursor(c);
+    }
+
     let body = SecurityMonitoringSignalListRequest::new()
         .filter(
             SecurityMonitoringSignalListRequestFilter::new()
@@ -96,7 +102,7 @@ pub async fn signals_search(
                 .from(from_dt)
                 .to(to_dt),
         )
-        .page(SecurityMonitoringSignalListRequestPage::new().limit(limit))
+        .page(page)
         .sort(SecurityMonitoringSignalsSort::TIMESTAMP_DESCENDING);
 
     let params = SearchSecurityMonitoringSignalsOptionalParams::default().body(body);
@@ -104,10 +110,16 @@ pub async fn signals_search(
         .search_security_monitoring_signals(params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to search signals: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
 
-pub async fn findings_search(cfg: &Config, query: Option<String>, limit: i64) -> Result<()> {
+pub async fn findings_search(
+    cfg: &Config,
+    query: Option<String>,
+    limit: i64,
+    cursor: Option<String>,
+) -> Result<()> {
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
         Some(c) => SecurityMonitoringAPI::with_client_and_config(dd_cfg, c),
@@ -117,12 +129,18 @@ pub async fn findings_search(cfg: &Config, query: Option<String>, limit: i64) ->
     if let Some(q) = query {
         params = params.filter_tags(q);
     }
+    if let Some(c) = cursor {
+        params = params.page_cursor(c);
+    }
     let resp = api
         .list_findings(params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to search findings: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
+
+
 
 // ---- Bulk Export ----
 

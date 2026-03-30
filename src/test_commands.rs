@@ -373,6 +373,7 @@ async fn test_logs_search() {
         10,
         "-timestamp".into(),
         None,
+        None,
     )
     .await;
     assert!(result.is_ok(), "logs search failed: {:?}", result.err());
@@ -406,6 +407,7 @@ async fn test_logs_search_with_oauth() {
         "now".into(),
         10,
         "-timestamp".into(),
+        None,
         None,
     )
     .await;
@@ -482,6 +484,7 @@ async fn test_logs_search_with_flex_storage() {
         10,
         "-timestamp".into(),
         Some("flex".into()),
+        None,
     )
     .await;
     assert!(
@@ -507,6 +510,7 @@ async fn test_logs_search_with_online_archives_storage() {
         10,
         "-timestamp".into(),
         Some("online-archives".into()),
+        None,
     )
     .await;
     assert!(
@@ -531,6 +535,7 @@ async fn test_logs_search_with_invalid_storage_tier() {
         10,
         "-timestamp".into(),
         Some("invalid-tier".into()),
+        None,
     )
     .await;
     assert!(
@@ -724,9 +729,15 @@ async fn test_events_search() {
     let cfg = test_config(&server.url());
     let _mock = mock_any(&mut server, "POST", r#"{"data": [], "meta": {"page": {}}}"#).await;
 
-    let result =
-        crate::commands::events::search(&cfg, "source:nginx".into(), "1h".into(), "now".into(), 10)
-            .await;
+    let result = crate::commands::events::search(
+        &cfg,
+        "source:nginx".into(),
+        "1h".into(),
+        "now".into(),
+        10,
+        None,
+    )
+    .await;
     assert!(result.is_ok(), "events search failed: {:?}", result.err());
     cleanup_env();
 }
@@ -749,9 +760,15 @@ async fn test_events_search_requires_api_keys() {
         read_only: false,
     };
 
-    let result =
-        crate::commands::events::search(&cfg, "source:nginx".into(), "1h".into(), "now".into(), 10)
-            .await;
+    let result = crate::commands::events::search(
+        &cfg,
+        "source:nginx".into(),
+        "1h".into(),
+        "now".into(),
+        10,
+        None,
+    )
+    .await;
     assert!(result.is_err(), "events search should require API keys");
     cleanup_env();
 }
@@ -1211,7 +1228,7 @@ async fn test_rum_events_list() {
     let mut s = mockito::Server::new_async().await;
     let cfg = test_config(&s.url());
     mock_all(&mut s, r#"{"data": []}"#).await;
-    let _ = crate::commands::rum::events_list(&cfg, "1h".into(), "now".into(), 10).await;
+    let _ = crate::commands::rum::events_list(&cfg, "1h".into(), "now".into(), 10, None).await;
     cleanup_env();
 }
 #[tokio::test]
@@ -1390,7 +1407,8 @@ async fn test_cicd_pipelines_list() {
     let mut s = mockito::Server::new_async().await;
     let cfg = test_config(&s.url());
     mock_all(&mut s, r#"{"data": []}"#).await;
-    let _ = crate::commands::cicd::pipelines_list(&cfg, None, "1h".into(), "now".into(), 10).await;
+    let _ = crate::commands::cicd::pipelines_list(&cfg, None, "1h".into(), "now".into(), 10, None)
+        .await;
     cleanup_env();
 }
 #[tokio::test]
@@ -1399,7 +1417,8 @@ async fn test_cicd_tests_list() {
     let mut s = mockito::Server::new_async().await;
     let cfg = test_config(&s.url());
     mock_all(&mut s, r#"{"data": []}"#).await;
-    let _ = crate::commands::cicd::tests_list(&cfg, None, "1h".into(), "now".into(), 10).await;
+    let _ =
+        crate::commands::cicd::tests_list(&cfg, None, "1h".into(), "now".into(), 10, None).await;
     cleanup_env();
 }
 #[tokio::test]
@@ -1474,7 +1493,7 @@ async fn test_incidents_list() {
     let mut s = mockito::Server::new_async().await;
     let cfg = test_config(&s.url());
     mock_all(&mut s, r#"{"data": []}"#).await;
-    let _ = crate::commands::incidents::list(&cfg, 10).await;
+    let _ = crate::commands::incidents::list(&cfg, 10, None).await;
     cleanup_env();
 }
 #[tokio::test]
@@ -1693,7 +1712,7 @@ async fn test_audit_logs_list() {
     let mut s = mockito::Server::new_async().await;
     let cfg = test_config(&s.url());
     mock_all(&mut s, r#"{"data": []}"#).await;
-    let _ = crate::commands::audit_logs::list(&cfg, "1h".into(), "now".into(), 10).await;
+    let _ = crate::commands::audit_logs::list(&cfg, "1h".into(), "now".into(), 10, None).await;
     cleanup_env();
 }
 
@@ -1907,7 +1926,7 @@ async fn test_service_catalog_list() {
     let mut s = mockito::Server::new_async().await;
     let cfg = test_config(&s.url());
     mock_all(&mut s, r#"{"data": []}"#).await;
-    let _ = crate::commands::service_catalog::list(&cfg).await;
+    let _ = crate::commands::service_catalog::list(&cfg, None, None).await;
     cleanup_env();
 }
 #[tokio::test]
@@ -3225,4 +3244,194 @@ fn test_top_level_commands_sorted_alphabetically() {
         names, sorted,
         "top-level commands must be in alphabetical order.\nActual:   {names:?}\nExpected: {sorted:?}"
     );
+}
+
+// =========================================================================
+// Pagination arg-threading tests — verify cursor/offset/page-number args
+// are accepted by clap structs and threaded correctly through match arms.
+// =========================================================================
+
+/// Pattern A cursor: RUM events accepts --cursor and threads it through.
+#[test]
+fn test_pagination_cursor_pattern_a_rum_events() {
+    use clap::Parser;
+
+    // Without cursor
+    let cli = crate::Cli::try_parse_from(["pup", "rum", "events", "--from", "1h", "--to", "now"])
+        .expect("rum events without --cursor should parse");
+    match cli.command {
+        crate::Commands::Rum { action } => match action {
+            crate::RumActions::Events { cursor, .. } => {
+                assert_eq!(cursor, None, "cursor should be None when not provided");
+            }
+            _ => panic!("expected RumActions::Events"),
+        },
+        _ => panic!("expected Commands::Rum"),
+    }
+
+    // With cursor
+    let cli = crate::Cli::try_parse_from([
+        "pup", "rum", "events", "--from", "1h", "--to", "now", "--cursor", "abc123",
+    ])
+    .expect("rum events with --cursor should parse");
+    match cli.command {
+        crate::Commands::Rum { action } => match action {
+            crate::RumActions::Events { cursor, .. } => {
+                assert_eq!(
+                    cursor,
+                    Some("abc123".to_string()),
+                    "cursor should be threaded through"
+                );
+            }
+            _ => panic!("expected RumActions::Events"),
+        },
+        _ => panic!("expected Commands::Rum"),
+    }
+}
+
+/// Pattern B cursor: logs search accepts --cursor and threads it through.
+#[test]
+fn test_pagination_cursor_pattern_b_logs_search() {
+    use clap::Parser;
+
+    // Without cursor
+    let cli = crate::Cli::try_parse_from([
+        "pup", "logs", "search", "--query", "*", "--from", "1h", "--to", "now",
+    ])
+    .expect("logs search without --cursor should parse");
+    match cli.command {
+        crate::Commands::Logs { action } => match action {
+            crate::LogActions::Search { cursor, .. } => {
+                assert_eq!(cursor, None, "cursor should be None when not provided");
+            }
+            _ => panic!("expected LogActions::Search"),
+        },
+        _ => panic!("expected Commands::Logs"),
+    }
+
+    // With cursor
+    let cli = crate::Cli::try_parse_from([
+        "pup",
+        "logs",
+        "search",
+        "--query",
+        "*",
+        "--from",
+        "1h",
+        "--to",
+        "now",
+        "--cursor",
+        "eyJhZnRlciI6Ik",
+    ])
+    .expect("logs search with --cursor should parse");
+    match cli.command {
+        crate::Commands::Logs { action } => match action {
+            crate::LogActions::Search { cursor, .. } => {
+                assert_eq!(
+                    cursor,
+                    Some("eyJhZnRlciI6Ik".to_string()),
+                    "cursor should be threaded through"
+                );
+            }
+            _ => panic!("expected LogActions::Search"),
+        },
+        _ => panic!("expected Commands::Logs"),
+    }
+}
+
+/// Offset pattern: incidents list accepts --page-offset and threads it through.
+#[test]
+fn test_pagination_offset_incidents_list() {
+    use clap::Parser;
+
+    // Without offset
+    let cli = crate::Cli::try_parse_from(["pup", "incidents", "list"])
+        .expect("incidents list should parse");
+    match cli.command {
+        crate::Commands::Incidents { action } => match action {
+            crate::IncidentActions::List { page_offset, .. } => {
+                assert_eq!(
+                    page_offset, None,
+                    "page_offset should be None when not provided"
+                );
+            }
+            _ => panic!("expected IncidentActions::List"),
+        },
+        _ => panic!("expected Commands::Incidents"),
+    }
+
+    // With offset
+    let cli = crate::Cli::try_parse_from(["pup", "incidents", "list", "--page-offset", "10"])
+        .expect("incidents list with --page-offset should parse");
+    match cli.command {
+        crate::Commands::Incidents { action } => match action {
+            crate::IncidentActions::List { page_offset, .. } => {
+                assert_eq!(
+                    page_offset,
+                    Some(10),
+                    "page_offset should be threaded through"
+                );
+            }
+            _ => panic!("expected IncidentActions::List"),
+        },
+        _ => panic!("expected Commands::Incidents"),
+    }
+}
+
+/// Page-number pattern: service-catalog list accepts --page-size and --page-number.
+#[test]
+fn test_pagination_page_number_service_catalog_list() {
+    use clap::Parser;
+
+    // Without page args
+    let cli = crate::Cli::try_parse_from(["pup", "service-catalog", "list"])
+        .expect("service-catalog list should parse");
+    match cli.command {
+        crate::Commands::ServiceCatalog { action } => match action {
+            crate::ServiceCatalogActions::List {
+                page_size,
+                page_number,
+            } => {
+                assert_eq!(
+                    page_size, None,
+                    "page_size should be None when not provided"
+                );
+                assert_eq!(
+                    page_number, None,
+                    "page_number should be None when not provided"
+                );
+            }
+            _ => panic!("expected ServiceCatalogActions::List"),
+        },
+        _ => panic!("expected Commands::ServiceCatalog"),
+    }
+
+    // With page args
+    let cli = crate::Cli::try_parse_from([
+        "pup",
+        "service-catalog",
+        "list",
+        "--page-size",
+        "10",
+        "--page-number",
+        "2",
+    ])
+    .expect("service-catalog list with page args should parse");
+    match cli.command {
+        crate::Commands::ServiceCatalog { action } => match action {
+            crate::ServiceCatalogActions::List {
+                page_size,
+                page_number,
+            } => {
+                assert_eq!(page_size, Some(10), "page_size should be threaded through");
+                assert_eq!(
+                    page_number,
+                    Some(2),
+                    "page_number should be threaded through"
+                );
+            }
+            _ => panic!("expected ServiceCatalogActions::List"),
+        },
+        _ => panic!("expected Commands::ServiceCatalog"),
+    }
 }

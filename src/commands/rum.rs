@@ -78,7 +78,13 @@ pub async fn apps_delete(cfg: &Config, app_id: &str) -> Result<()> {
     Ok(())
 }
 
-pub async fn events_list(cfg: &Config, from: String, to: String, limit: i32) -> Result<()> {
+pub async fn events_list(
+    cfg: &Config,
+    from: String,
+    to: String,
+    limit: i32,
+    cursor: Option<String>,
+) -> Result<()> {
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
         Some(c) => RUMAPI::with_client_and_config(dd_cfg, c),
@@ -90,16 +96,20 @@ pub async fn events_list(cfg: &Config, from: String, to: String, limit: i32) -> 
     let to_dt =
         chrono::DateTime::from_timestamp_millis(util::parse_time_to_unix_millis(&to)?).unwrap();
 
-    let params = ListRUMEventsOptionalParams::default()
+    let mut params = ListRUMEventsOptionalParams::default()
         .filter_from(from_dt)
         .filter_to(to_dt)
         .page_limit(limit);
+    if let Some(c) = cursor {
+        params = params.page_cursor(c);
+    }
 
     let resp = api
         .list_rum_events(params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to list RUM events: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
 
 pub async fn sessions_search(
@@ -108,6 +118,7 @@ pub async fn sessions_search(
     from: String,
     to: String,
     _limit: i32,
+    cursor: Option<String>,
 ) -> Result<()> {
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
@@ -127,15 +138,22 @@ pub async fn sessions_search(
         filter = filter.query(q);
     }
 
+    let mut page = datadog_api_client::datadogV2::model::RUMQueryPageOptions::new();
+    if let Some(c) = cursor {
+        page = page.cursor(c);
+    }
+
     let body = RUMSearchEventsRequest::new()
         .filter(filter)
+        .page(page)
         .sort(RUMSort::TIMESTAMP_DESCENDING);
 
     let resp = api
         .search_rum_events(body)
         .await
         .map_err(|e| anyhow::anyhow!("failed to search RUM sessions: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
 
 pub async fn apps_update(cfg: &Config, app_id: &str, file: &str) -> Result<()> {
@@ -297,7 +315,13 @@ pub async fn retention_filters_delete(cfg: &Config, app_id: &str, filter_id: &st
 
 // ---- RUM Sessions ----
 
-pub async fn sessions_list(cfg: &Config, from: String, to: String, limit: i32) -> Result<()> {
+pub async fn sessions_list(
+    cfg: &Config,
+    from: String,
+    to: String,
+    limit: i32,
+    cursor: Option<String>,
+) -> Result<()> {
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
         Some(c) => RUMAPI::with_client_and_config(dd_cfg, c),
@@ -316,17 +340,25 @@ pub async fn sessions_list(cfg: &Config, from: String, to: String, limit: i32) -
         .to(to_str)
         .query("@type:session".to_string());
 
+    let mut page = datadog_api_client::datadogV2::model::RUMQueryPageOptions::new().limit(limit);
+    if let Some(c) = cursor {
+        page = page.cursor(c);
+    }
+
     let body = RUMSearchEventsRequest::new()
         .filter(filter)
         .sort(RUMSort::TIMESTAMP_DESCENDING)
-        .page(datadog_api_client::datadogV2::model::RUMQueryPageOptions::new().limit(limit));
+        .page(page);
 
     let resp = api
         .search_rum_events(body)
         .await
         .map_err(|e| anyhow::anyhow!("failed to list RUM sessions: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
+
+
 
 // ---- RUM Playlists ----
 

@@ -14,14 +14,19 @@ fn make_api(cfg: &Config) -> ObservabilityPipelinesAPI {
     ObservabilityPipelinesAPI::with_config(client::make_dd_config(cfg))
 }
 
-pub async fn list(cfg: &Config, limit: i64) -> Result<()> {
+pub async fn list(cfg: &Config, limit: i64, page_offset: Option<i64>) -> Result<()> {
     let api = make_api(cfg);
-    let params = ListPipelinesOptionalParams::default().page_size(limit);
+    let mut params = ListPipelinesOptionalParams::default().page_size(limit);
+    if let Some(o) = page_offset {
+        // obs-pipelines uses page_number internally; page_offset maps to page number
+        params = params.page_number(o);
+    }
     let resp = api
         .list_pipelines(params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to list pipelines: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
 
 pub async fn get(cfg: &Config, pipeline_id: &str) -> Result<()> {

@@ -43,6 +43,7 @@ pub async fn search(
     from: String,
     to: String,
     limit: i32,
+    cursor: Option<String>,
 ) -> Result<()> {
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
@@ -60,6 +61,11 @@ pub async fn search(
         .unwrap()
         .to_rfc3339();
 
+    let mut page = EventsRequestPage::new().limit(limit);
+    if let Some(c) = cursor {
+        page = page.cursor(c);
+    }
+
     let body = EventsListRequest::new()
         .filter(
             EventsQueryFilter::new()
@@ -67,7 +73,7 @@ pub async fn search(
                 .from(from_str)
                 .to(to_str),
         )
-        .page(EventsRequestPage::new().limit(limit))
+        .page(page)
         .sort(EventsSort::TIMESTAMP_DESCENDING);
 
     let params = SearchEventsOptionalParams::default().body(body);
@@ -75,7 +81,8 @@ pub async fn search(
         .search_events(params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to search events: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
 
 pub async fn get(cfg: &Config, id: i64) -> Result<()> {

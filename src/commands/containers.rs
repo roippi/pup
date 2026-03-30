@@ -14,6 +14,7 @@ pub async fn list(
     group_by: Option<String>,
     sort: Option<String>,
     page_size: Option<i32>,
+    cursor: Option<String>,
 ) -> Result<()> {
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
@@ -33,11 +34,15 @@ pub async fn list(
     if let Some(v) = page_size {
         params = params.page_size(v);
     }
+    if let Some(c) = cursor {
+        params = params.page_cursor(c);
+    }
     let resp = api
         .list_containers(params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to list containers: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
 
 pub async fn images_list(
@@ -46,6 +51,7 @@ pub async fn images_list(
     group_by: Option<String>,
     sort: Option<String>,
     page_size: Option<i32>,
+    cursor: Option<String>,
 ) -> Result<()> {
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
@@ -65,9 +71,13 @@ pub async fn images_list(
     if let Some(v) = page_size {
         params = params.page_size(v);
     }
+    if let Some(c) = cursor {
+        params = params.page_cursor(c);
+    }
     let resp = api
         .list_container_images(params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to list container images: {e:?}"))?;
-    formatter::output(cfg, &resp)
+    let raw = serde_json::to_value(&resp)?;
+    formatter::output_with_raw(cfg, &resp, &raw)
 }
