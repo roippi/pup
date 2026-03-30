@@ -31,10 +31,12 @@ fn load_template(dir: &Path, name: &str) -> Result<StepTemplate> {
 /// Apply a template to a step: template fields fill in any fields the step left unset.
 fn apply_template(mut step: Step, tmpl: &StepTemplate) -> Result<Step> {
     if step.kind.is_empty() {
-        step.kind = tmpl
-            .kind
-            .clone()
-            .ok_or_else(|| anyhow::anyhow!("step '{}' has no 'kind' and template provides none", step.name))?;
+        step.kind = tmpl.kind.clone().ok_or_else(|| {
+            anyhow::anyhow!(
+                "step '{}' has no 'kind' and template provides none",
+                step.name
+            )
+        })?;
     }
     macro_rules! fill {
         ($field:ident) => {
@@ -111,10 +113,7 @@ pub fn list_runbooks(cfg: &Config, tags: &[String]) -> Result<Vec<RunbookMeta>> 
             if path.is_dir() {
                 return false;
             }
-            let stem = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or("");
+            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
             if stem.starts_with('_') {
                 return false;
             }

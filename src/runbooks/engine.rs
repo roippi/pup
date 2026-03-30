@@ -301,7 +301,7 @@ async fn execute_shell(step: &Step, vars: &HashMap<String, String>) -> Result<St
         .await;
 
     match result {
-        Err(e) if optional => Ok(String::new()),
+        Err(_e) if optional => Ok(String::new()),
         Err(e) => anyhow::bail!("failed to run shell command: {e}"),
         Ok(out) => {
             // Always surface stderr if non-empty (warnings, notices, etc.)
