@@ -117,9 +117,12 @@ async fn execute_async_query(cfg: &Config, body: Value) -> Result<Value> {
         tokio::time::sleep(Duration::from_secs(1)).await;
 
         let fetch_body = build_fetch_request(&body, &query_id);
-        let poll_resp =
-            client::raw_post(cfg, "/api/unstable/advanced/query/tabular/fetch", fetch_body)
-                .await?;
+        let poll_resp = client::raw_post(
+            cfg,
+            "/api/unstable/advanced/query/tabular/fetch",
+            fetch_body,
+        )
+        .await?;
 
         match extract_query_status(&poll_resp)? {
             None => return Ok(poll_resp),
@@ -306,10 +309,9 @@ mod tests {
 
     #[test]
     fn test_extract_query_status_done() {
-        let resp: Value = serde_json::from_str(
-            r#"{"meta":{"queries":[{"status":"done","name":"user_query"}]}}"#,
-        )
-        .unwrap();
+        let resp: Value =
+            serde_json::from_str(r#"{"meta":{"queries":[{"status":"done","name":"user_query"}]}}"#)
+                .unwrap();
         assert!(extract_query_status(&resp).unwrap().is_none());
     }
 
