@@ -1,4 +1,5 @@
-#[allow(dead_code)]
+// api.rs provides raw HTTP helpers used by test_commands.rs; not needed in production binary.
+#[cfg(test)]
 mod api;
 mod auth;
 mod client;
@@ -7,6 +8,8 @@ mod config;
 #[cfg(not(target_arch = "wasm32"))]
 mod extensions;
 mod formatter;
+#[cfg(not(target_arch = "wasm32"))]
+mod runbooks;
 mod skills;
 #[cfg(not(target_arch = "wasm32"))]
 mod tunnel;
@@ -138,28 +141,6 @@ enum Commands {
         #[command(subcommand)]
         action: AliasActions,
     },
-    /// Manage agent skills for AI coding assistants
-    ///
-    /// Install structured workflow guides, domain references, and specialized
-    /// agents that teach AI coding assistants how to compose pup commands.
-    ///
-    /// COMMANDS:
-    ///   list      List available skills and agents
-    ///   install   Install skills for the detected AI coding assistant
-    ///   path      Show where skills would be installed
-    ///
-    /// EXAMPLES:
-    ///   pup skills list
-    ///   pup skills install
-    ///   pup skills install dd-pup
-    ///   pup skills install --type=agent
-    ///   pup skills install --target-agent=cursor
-    ///   pup skills path
-    #[command(verbatim_doc_comment)]
-    Skills {
-        #[command(subcommand)]
-        action: SkillsActions,
-    },
     /// Manage API keys
     ///
     /// Manage Datadog API keys.
@@ -194,6 +175,51 @@ enum Commands {
     ApiKeys {
         #[command(subcommand)]
         action: ApiKeyActions,
+    },
+    /// Manage APM services and entities
+    ///
+    /// Manage Datadog APM services and entities.
+    ///
+    /// APM (Application Performance Monitoring) tracks your services, operations, and dependencies
+    /// to provide performance insights. This command provides access to dynamic operational data
+    /// about traced services, datastores, queues, and other APM entities.
+    ///
+    /// DISTINCTION FROM SERVICE CATALOG:
+    ///   • service-catalog: Static metadata registry (ownership, definitions, documentation)
+    ///   • apm: Dynamic operational data (performance stats, traces, actual runtime behavior)
+    ///
+    ///   Service catalog shows "what services exist and who owns them"
+    ///   APM shows "what's running, how it's performing, and what it's calling"
+    ///
+    /// CAPABILITIES:
+    ///   • List services with performance statistics (requests, errors, latency)
+    ///   • Query entities with rich metadata (services, datastores, queues, inferred services)
+    ///   • List operations and resources (endpoints) for services
+    ///   • View service dependencies and flow maps with performance metrics
+    ///
+    /// COMMAND GROUPS:
+    ///   services       List and query APM services with performance data
+    ///   entities       Query APM entities (services, datastores, queues, etc.)
+    ///   dependencies   View service dependencies and call relationships
+    ///   flow-map       Visualize service flow with performance metrics
+    ///
+    /// EXAMPLES:
+    ///   # List services with stats
+    ///   pup apm services stats --start $(date -d '1 hour ago' +%s) --end $(date +%s)
+    ///
+    ///   # Query entities with filtering
+    ///   pup apm entities list --start $(date -d '1 hour ago' +%s) --end $(date +%s) --env prod
+    ///
+    ///   # View service dependencies
+    ///   pup apm dependencies list --env prod --start $(date -d '1 hour ago' +%s) --end $(date +%s)
+    ///
+    /// AUTHENTICATION:
+    ///   Requires either OAuth2 authentication (pup auth login) or API keys
+    ///   (DD_API_KEY and DD_APP_KEY environment variables).
+    #[command(verbatim_doc_comment)]
+    Apm {
+        #[command(subcommand)]
+        action: ApmActions,
     },
     /// Manage App Builder applications
     ///
@@ -287,51 +313,6 @@ enum Commands {
         #[command(subcommand)]
         action: AppKeyActions,
     },
-    /// Manage APM services and entities
-    ///
-    /// Manage Datadog APM services and entities.
-    ///
-    /// APM (Application Performance Monitoring) tracks your services, operations, and dependencies
-    /// to provide performance insights. This command provides access to dynamic operational data
-    /// about traced services, datastores, queues, and other APM entities.
-    ///
-    /// DISTINCTION FROM SERVICE CATALOG:
-    ///   • service-catalog: Static metadata registry (ownership, definitions, documentation)
-    ///   • apm: Dynamic operational data (performance stats, traces, actual runtime behavior)
-    ///
-    ///   Service catalog shows "what services exist and who owns them"
-    ///   APM shows "what's running, how it's performing, and what it's calling"
-    ///
-    /// CAPABILITIES:
-    ///   • List services with performance statistics (requests, errors, latency)
-    ///   • Query entities with rich metadata (services, datastores, queues, inferred services)
-    ///   • List operations and resources (endpoints) for services
-    ///   • View service dependencies and flow maps with performance metrics
-    ///
-    /// COMMAND GROUPS:
-    ///   services       List and query APM services with performance data
-    ///   entities       Query APM entities (services, datastores, queues, etc.)
-    ///   dependencies   View service dependencies and call relationships
-    ///   flow-map       Visualize service flow with performance metrics
-    ///
-    /// EXAMPLES:
-    ///   # List services with stats
-    ///   pup apm services stats --start $(date -d '1 hour ago' +%s) --end $(date +%s)
-    ///
-    ///   # Query entities with filtering
-    ///   pup apm entities list --start $(date -d '1 hour ago' +%s) --end $(date +%s) --env prod
-    ///
-    ///   # View service dependencies
-    ///   pup apm dependencies list --env prod --start $(date -d '1 hour ago' +%s) --end $(date +%s)
-    ///
-    /// AUTHENTICATION:
-    ///   Requires either OAuth2 authentication (pup auth login) or API keys
-    ///   (DD_API_KEY and DD_APP_KEY environment variables).
-    #[command(verbatim_doc_comment)]
-    Apm {
-        #[command(subcommand)]
-        action: ApmActions,
-    },
     /// Query audit logs
     ///
     /// Search and list audit logs for your Datadog organization.
@@ -396,9 +377,10 @@ enum Commands {
     ///
     /// COMMANDS:
     ///   login       Authenticate via browser with OAuth2
-    ///   status      Check current authentication status
-    ///   refresh     Manually refresh access token
     ///   logout      Clear all stored credentials
+    ///   refresh     Manually refresh access token
+    ///   status      Check current authentication status
+    ///   test        Test connection and credentials
     ///
     /// OAUTH2 SCOPES:
     ///   The following scopes are requested during login:
@@ -430,6 +412,9 @@ enum Commands {
     ///
     ///   # Logout and clear credentials
     ///   pup auth logout
+    ///
+    ///   # Test connection and credentials
+    ///   pup auth test
     ///
     ///   # Login to different Datadog site
     ///   pup auth login --site datadoghq.eu
@@ -532,6 +517,12 @@ enum Commands {
     Cases {
         #[command(subcommand)]
         action: CaseActions,
+    },
+    /// Manage change requests
+    #[command(name = "change-requests")]
+    ChangeManagement {
+        #[command(subcommand)]
+        action: ChangeManagementActions,
     },
     /// Manage CI/CD visibility
     ///
@@ -777,26 +768,6 @@ enum Commands {
         #[command(subcommand)]
         action: DashboardActions,
     },
-    /// Query Datadog data using DDSQL (Datadog SQL)
-    ///
-    /// DDSQL lets you query metrics, logs, and reference tables using SQL syntax.
-    ///
-    /// COMMANDS:
-    ///   table        Execute query and return table data (supports -o json/yaml/table/csv)
-    ///   time-series  Execute query and return time series data
-    ///
-    /// EXAMPLES:
-    ///   pup ddsql table --query "SELECT * FROM reference_tables.offices_ips LIMIT 5"
-    ///   pup ddsql table --query "SELECT * FROM reference_tables.offices_ips" -o csv > results.csv
-    ///   pup ddsql time-series --query "SELECT avg(system.cpu.user) FROM metrics GROUP BY host" --from 1h --interval 300000
-    ///
-    /// AUTHENTICATION:
-    ///   Requires OAuth2 (via 'pup auth login') or API key + Application key.
-    #[command(verbatim_doc_comment)]
-    Ddsql {
-        #[command(subcommand)]
-        action: DdsqlActions,
-    },
     /// Manage data governance
     ///
     /// Manage data governance, sensitive data scanning, and data deletion.
@@ -820,6 +791,26 @@ enum Commands {
     DataGovernance {
         #[command(subcommand)]
         action: DataGovActions,
+    },
+    /// Query Datadog data using DDSQL (Datadog SQL)
+    ///
+    /// DDSQL lets you query metrics, logs, and reference tables using SQL syntax.
+    ///
+    /// COMMANDS:
+    ///   table        Execute query and return table data (supports -o json/yaml/table/csv)
+    ///   time-series  Execute query and return time series data
+    ///
+    /// EXAMPLES:
+    ///   pup ddsql table --query "SELECT * FROM reference_tables.offices_ips LIMIT 5"
+    ///   pup ddsql table --query "SELECT * FROM reference_tables.offices_ips" -o csv > results.csv
+    ///   pup ddsql time-series --query "SELECT avg(system.cpu.user) FROM metrics GROUP BY host" --from 1h --interval 300000
+    ///
+    /// AUTHENTICATION:
+    ///   Requires OAuth2 (via 'pup auth login') or API key + Application key.
+    #[command(verbatim_doc_comment)]
+    Ddsql {
+        #[command(subcommand)]
+        action: DdsqlActions,
     },
     /// Manage monitor downtimes
     ///
@@ -965,6 +956,42 @@ enum Commands {
         #[command(subcommand)]
         action: HamrActions,
     },
+    /// Internal Developer Portal — agent-native context layer
+    ///
+    /// Retrieve service context, ownership, health, dependencies, and
+    /// suggested next actions from the Datadog Service Catalog / IDP.
+    ///
+    /// CAPABILITIES:
+    ///   • Get a full context summary for any entity (assist)
+    ///   • Find entities by name or query (find)
+    ///   • Resolve ownership and on-call (owner)
+    ///   • Show upstream/downstream dependencies (deps)
+    ///   • Register a service definition from YAML (register)
+    ///
+    /// EXAMPLES:
+    ///   # Get full context for a service
+    ///   pup idp assist catalog-http
+    ///
+    ///   # Find entities matching a query
+    ///   pup idp find "catalog"
+    ///
+    ///   # Who owns this service?
+    ///   pup idp owner catalog-http
+    ///
+    ///   # Show dependencies
+    ///   pup idp deps catalog-http
+    ///
+    ///   # Register a service definition
+    ///   pup idp register service.datadog.yaml
+    ///
+    /// AUTHENTICATION:
+    ///   Requires either OAuth2 authentication (pup auth login) or API keys
+    ///   (DD_API_KEY and DD_APP_KEY environment variables).
+    #[command(verbatim_doc_comment)]
+    Idp {
+        #[command(subcommand)]
+        action: IdpActions,
+    },
     /// Manage incidents
     ///
     /// Manage Datadog incidents for incident response and tracking.
@@ -1055,42 +1082,6 @@ enum Commands {
         #[command(subcommand)]
         action: InfraActions,
     },
-    /// Internal Developer Portal — agent-native context layer
-    ///
-    /// Retrieve service context, ownership, health, dependencies, and
-    /// suggested next actions from the Datadog Service Catalog / IDP.
-    ///
-    /// CAPABILITIES:
-    ///   • Get a full context summary for any entity (assist)
-    ///   • Find entities by name or query (find)
-    ///   • Resolve ownership and on-call (owner)
-    ///   • Show upstream/downstream dependencies (deps)
-    ///   • Register a service definition from YAML (register)
-    ///
-    /// EXAMPLES:
-    ///   # Get full context for a service
-    ///   pup idp assist catalog-http
-    ///
-    ///   # Find entities matching a query
-    ///   pup idp find "catalog"
-    ///
-    ///   # Who owns this service?
-    ///   pup idp owner catalog-http
-    ///
-    ///   # Show dependencies
-    ///   pup idp deps catalog-http
-    ///
-    ///   # Register a service definition
-    ///   pup idp register service.datadog.yaml
-    ///
-    /// AUTHENTICATION:
-    ///   Requires either OAuth2 authentication (pup auth login) or API keys
-    ///   (DD_API_KEY and DD_APP_KEY environment variables).
-    #[command(verbatim_doc_comment)]
-    Idp {
-        #[command(subcommand)]
-        action: IdpActions,
-    },
     /// Manage third-party integrations
     ///
     /// Manage third-party integrations with external services.
@@ -1149,6 +1140,27 @@ enum Commands {
     Investigations {
         #[command(subcommand)]
         action: InvestigationActions,
+    },
+    /// Manage LLM Observability projects, experiments, and datasets
+    ///
+    /// Manage LLM Observability resources for AI/ML application monitoring.
+    ///
+    /// CAPABILITIES:
+    ///   • Create and list LLM Obs projects
+    ///   • Create, list, update, and delete experiments
+    ///   • Create and list datasets within a project
+    ///
+    /// EXAMPLES:
+    ///   pup llm-obs projects list
+    ///   pup llm-obs experiments list
+    ///   pup llm-obs datasets list --project-id=my-project
+    ///
+    /// AUTHENTICATION:
+    ///   Requires either OAuth2 authentication or API keys.
+    #[command(name = "llm-obs", verbatim_doc_comment)]
+    LlmObs {
+        #[command(subcommand)]
+        action: LlmObsActions,
     },
     /// Search and analyze logs
     ///
@@ -1533,12 +1545,6 @@ enum Commands {
         #[command(subcommand)]
         action: OrgActions,
     },
-    /// Manage change requests
-    #[command(name = "change-requests")]
-    ChangeManagement {
-        #[command(subcommand)]
-        action: ChangeManagementActions,
-    },
     /// Send product analytics events
     ///
     /// Send server-side product analytics events to Datadog.
@@ -1568,6 +1574,27 @@ enum Commands {
     ProductAnalytics {
         #[command(subcommand)]
         action: ProductAnalyticsActions,
+    },
+    /// Manage reference tables for log enrichment
+    ///
+    /// Reference tables allow you to enrich logs with additional data from
+    /// CSV files stored in cloud storage or uploaded directly.
+    ///
+    /// CAPABILITIES:
+    ///   • List, get, and create reference tables
+    ///   • Batch query rows by primary key
+    ///
+    /// EXAMPLES:
+    ///   pup reference-tables list
+    ///   pup reference-tables get <table-id>
+    ///   pup reference-tables batch-query --file=query.json
+    ///
+    /// AUTHENTICATION:
+    ///   Requires either OAuth2 authentication or API keys.
+    #[command(name = "reference-tables", verbatim_doc_comment)]
+    ReferenceTables {
+        #[command(subcommand)]
+        action: ReferenceTablesActions,
     },
     /// Manage Real User Monitoring (RUM)
     ///
@@ -1623,6 +1650,40 @@ enum Commands {
     Rum {
         #[command(subcommand)]
         action: RumActions,
+    },
+    #[cfg(not(target_arch = "wasm32"))]
+    /// Execute and manage local operational runbooks
+    ///
+    /// Runbooks are YAML files stored in ~/.config/pup/runbooks/ that define
+    /// sequential operational steps mixing pup commands, shell tools, Datadog
+    /// Workflows, and human confirmation gates.
+    ///
+    /// COMMANDS:
+    ///   list        List available runbooks (optionally filtered by tags)
+    ///   describe    Show runbook details and steps
+    ///   run         Execute a runbook with optional variable overrides
+    ///   validate    Validate runbook structure without executing
+    ///   import      Import a runbook from a file path or URL
+    ///
+    /// EXAMPLES:
+    ///   # List all runbooks
+    ///   pup runbooks list
+    ///
+    ///   # List runbooks tagged type:deployment
+    ///   pup runbooks list --tag=type:deployment
+    ///
+    ///   # Run a runbook with variable overrides
+    ///   pup runbooks run deploy-service --arg SERVICE=payments --arg VERSION=1.2.3
+    ///
+    ///   # Validate without executing
+    ///   pup runbooks validate deploy-service
+    ///
+    ///   # Import from a file or URL
+    ///   pup runbooks import ./my-runbook.yaml
+    #[command(verbatim_doc_comment)]
+    Runbooks {
+        #[command(subcommand)]
+        action: RunbookActions,
     },
     /// Manage service scorecards
     ///
@@ -1704,6 +1765,28 @@ enum Commands {
     ServiceCatalog {
         #[command(subcommand)]
         action: ServiceCatalogActions,
+    },
+    /// Manage agent skills for AI coding assistants
+    ///
+    /// Install structured workflow guides, domain references, and specialized
+    /// agents that teach AI coding assistants how to compose pup commands.
+    ///
+    /// COMMANDS:
+    ///   list      List available skills and agents
+    ///   install   Install skills for the detected AI coding assistant
+    ///   path      Show where skills would be installed
+    ///
+    /// EXAMPLES:
+    ///   pup skills list
+    ///   pup skills install
+    ///   pup skills install dd-pup
+    ///   pup skills install --type=agent
+    ///   pup skills install --target-agent=cursor
+    ///   pup skills path
+    #[command(verbatim_doc_comment)]
+    Skills {
+        #[command(subcommand)]
+        action: SkillsActions,
     },
     /// Manage Service Level Objectives
     ///
@@ -1880,8 +1963,6 @@ enum Commands {
         #[command(subcommand)]
         action: TagActions,
     },
-    /// Test connection and credentials
-    Test,
     /// Search and aggregate APM traces
     ///
     /// Search and aggregate APM span data for distributed tracing analysis.
@@ -1963,6 +2044,8 @@ enum Commands {
         #[command(subcommand)]
         action: UserActions,
     },
+    /// Print version information
+    Version,
     /// Manage Datadog workflows
     ///
     /// Create, update, delete, and execute Datadog Workflow Automation workflows.
@@ -1997,48 +2080,6 @@ enum Commands {
         #[command(subcommand)]
         action: WorkflowActions,
     },
-    /// Manage LLM Observability projects, experiments, and datasets
-    ///
-    /// Manage LLM Observability resources for AI/ML application monitoring.
-    ///
-    /// CAPABILITIES:
-    ///   • Create and list LLM Obs projects
-    ///   • Create, list, update, and delete experiments
-    ///   • Create and list datasets within a project
-    ///
-    /// EXAMPLES:
-    ///   pup llm-obs projects list
-    ///   pup llm-obs experiments list
-    ///   pup llm-obs datasets list --project-id=my-project
-    ///
-    /// AUTHENTICATION:
-    ///   Requires either OAuth2 authentication or API keys.
-    #[command(name = "llm-obs", verbatim_doc_comment)]
-    LlmObs {
-        #[command(subcommand)]
-        action: LlmObsActions,
-    },
-    /// Manage reference tables for log enrichment
-    ///
-    /// Reference tables allow you to enrich logs with additional data from
-    /// CSV files stored in cloud storage or uploaded directly.
-    ///
-    /// CAPABILITIES:
-    ///   • List, get, and create reference tables
-    ///   • Batch query rows by primary key
-    ///
-    /// EXAMPLES:
-    ///   pup reference-tables list
-    ///   pup reference-tables get <table-id>
-    ///   pup reference-tables batch-query --file=query.json
-    ///
-    /// AUTHENTICATION:
-    ///   Requires either OAuth2 authentication or API keys.
-    #[command(name = "reference-tables", verbatim_doc_comment)]
-    ReferenceTables {
-        #[command(subcommand)]
-        action: ReferenceTablesActions,
-    },
     /// Manage pup extensions
     ///
     /// Install, list, remove, and upgrade pup extensions.
@@ -2060,8 +2101,6 @@ enum Commands {
         #[command(subcommand)]
         action: ExtensionActions,
     },
-    /// Print version information
-    Version,
 }
 
 // ---- Extensions ----
@@ -5514,6 +5553,29 @@ enum AgentActions {
     Guide,
 }
 
+// ---- Runbooks ----
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Subcommand)]
+enum RunbookActions {
+    /// List available runbooks
+    List {
+        #[arg(long, help = "Filter by tag (key:value, repeatable)", action = clap::ArgAction::Append)]
+        tag: Vec<String>,
+    },
+    /// Show runbook details and steps
+    Describe { name: String },
+    /// Execute a runbook
+    Run {
+        name: String,
+        #[arg(long, help = "Set a variable: KEY=VALUE", action = clap::ArgAction::Append)]
+        arg: Vec<String>,
+    },
+    /// Validate a runbook without executing
+    Validate { name: String },
+    /// Import a runbook from a file path or URL
+    Import { source: String },
+}
+
 // ---- Alias ----
 #[derive(Subcommand)]
 enum AliasActions {
@@ -5759,6 +5821,8 @@ enum AuthActions {
     Refresh,
     /// List all stored org sessions
     List,
+    /// Test connection and credentials
+    Test,
 }
 
 // ---- Agent-mode JSON schema for --help ----
@@ -8530,6 +8594,25 @@ async fn main_inner() -> anyhow::Result<()> {
                 },
             }
         }
+        // --- Runbooks ---
+        #[cfg(not(target_arch = "wasm32"))]
+        Commands::Runbooks { action } => match action {
+            RunbookActions::List { tag } => {
+                commands::runbooks::list(&cfg, tag)?;
+            }
+            RunbookActions::Describe { name } => {
+                commands::runbooks::describe(&cfg, &name)?;
+            }
+            RunbookActions::Run { name, arg } => {
+                commands::runbooks::run(&cfg, &name, arg, cfg.auto_approve).await?;
+            }
+            RunbookActions::Validate { name } => {
+                commands::runbooks::validate(&cfg, &name)?;
+            }
+            RunbookActions::Import { source } => {
+                commands::runbooks::import(&cfg, &source).await?;
+            }
+        },
         // --- Auth ---
         Commands::Auth { action } => match action {
             AuthActions::Login {
@@ -8556,6 +8639,7 @@ async fn main_inner() -> anyhow::Result<()> {
             AuthActions::Token => commands::auth::token(&cfg)?,
             AuthActions::Refresh => commands::auth::refresh(&cfg).await?,
             AuthActions::List => commands::auth::list(&cfg)?,
+            AuthActions::Test => commands::test::run(&cfg)?,
         },
         // --- Workflows ---
         Commands::Workflows { action } => {
@@ -8822,7 +8906,6 @@ async fn main_inner() -> anyhow::Result<()> {
             }
         }
         Commands::Version => println!("{}", version::build_info()),
-        Commands::Test => commands::test::run(&cfg)?,
     }
 
     Ok(())
