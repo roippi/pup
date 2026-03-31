@@ -2075,17 +2075,14 @@ enum ExtensionActions {
         /// Source: local file path (with --local) or GitHub owner/repo
         source: String,
         /// Install a specific release tag (GitHub only)
-        #[arg(long)]
+        #[arg(long, conflicts_with = "local")]
         tag: Option<String>,
         /// Install from a local file path
         #[arg(long)]
         local: bool,
         /// Symlink instead of copy (with --local)
-        #[arg(long)]
+        #[arg(long, requires = "local")]
         link: bool,
-        /// Install from a direct URL
-        #[arg(long)]
-        url: bool,
         /// Extension name (auto-derived from source if omitted)
         #[arg(long)]
         name: Option<String>,
@@ -8644,21 +8641,21 @@ async fn main_inner() -> anyhow::Result<()> {
                 tag,
                 local,
                 link,
-                url,
                 name,
                 force,
                 description,
             } => {
                 commands::extension::install(
                     &cfg,
-                    source,
-                    tag,
-                    local,
-                    link,
-                    url,
-                    name,
-                    force,
-                    description,
+                    commands::extension::InstallOptions {
+                        source,
+                        tag,
+                        local,
+                        link,
+                        name,
+                        force,
+                        description,
+                    },
                 )?;
             }
             ExtensionActions::Remove { name } => commands::extension::remove(&cfg, name)?,

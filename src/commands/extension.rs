@@ -56,19 +56,28 @@ pub fn list(cfg: &Config) -> Result<()> {
     Ok(())
 }
 
+/// Options for installing an extension.
+pub struct InstallOptions {
+    pub source: String,
+    pub tag: Option<String>,
+    pub local: bool,
+    pub link: bool,
+    pub name: Option<String>,
+    pub force: bool,
+    pub description: Option<String>,
+}
+
 /// Install an extension from a source.
-#[allow(clippy::too_many_arguments)]
-pub fn install(
-    _cfg: &Config,
-    source: String,
-    _tag: Option<String>,
-    local: bool,
-    link: bool,
-    _url: bool,
-    name: Option<String>,
-    force: bool,
-    description: Option<String>,
-) -> Result<()> {
+pub fn install(_cfg: &Config, opts: InstallOptions) -> Result<()> {
+    let InstallOptions {
+        source,
+        tag,
+        local,
+        link,
+        name,
+        force,
+        description,
+    } = opts;
     if local {
         let source_path = PathBuf::from(&source);
         // Derive name from filename if not provided.
@@ -107,11 +116,22 @@ pub fn install(
         return Ok(());
     }
 
-    // GitHub install (not yet implemented).
-    bail!(
-        "GitHub-based installation is not yet implemented. \
-         Use --local to install from a local file path."
-    );
+    // GitHub-based installation: source is "owner/repo".
+    extensions::install::install_from_github(
+        &source,
+        tag.as_deref(),
+        name.as_deref(),
+        force,
+        description.as_deref(),
+    )?;
+
+    let display_name = name.unwrap_or_else(|| {
+        let repo = source.split('/').nth(1).unwrap_or(&source);
+        extensions::install::derive_name_from_repo(repo)
+    });
+    println!("Installed extension '{display_name}' from github:{source}");
+
+    Ok(())
 }
 
 /// Remove an installed extension.
@@ -121,7 +141,28 @@ pub fn remove(_cfg: &Config, name: String) -> Result<()> {
     Ok(())
 }
 
-/// Upgrade an extension (stub for future implementation).
-pub fn upgrade(_cfg: &Config, _name: Option<String>, _all: bool) -> Result<()> {
-    bail!("extension upgrade is not yet implemented")
+/// Upgrade one or all installed extensions.
+pub fn upgrade(_cfg: &Config, name: Option<String>, all: bool) -> Result<()> {
+    if all {
+        let results = extensions::install::upgrade_all_extensions()?;
+        for msg in &results {
+            println!("{msg}");
+        }
+        return Ok(());
+    }
+
+    match name {
+        Some(n) => {
+            let msg = extensions::install::upgrade_extension(&n)?;
+            println!("{msg}");
+        }
+        None => {
+            bail!(
+                "specify an extension name to upgrade, or use --all to upgrade all extensions.\n\
+                 Usage: pup extension upgrade <name>\n\
+                 Usage: pup extension upgrade --all"
+            );
+        }
+    }
+    Ok(())
 }

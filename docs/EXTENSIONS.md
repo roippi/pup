@@ -8,7 +8,17 @@ Extensions let teams ship experimental features independently without modifying 
 
 ## Quick Start
 
-### Install an extension from a local file
+### Install an extension from GitHub
+
+```bash
+# Install from a GitHub repository (downloads the latest release)
+pup extension install jkirsteins/pup-hello
+
+# Install a specific release version
+pup extension install jkirsteins/pup-hello --tag v1.0.0
+```
+
+### Install from a local file
 
 ```bash
 # Install from a local binary
@@ -33,6 +43,12 @@ pup extension list
 
 # List in table format
 pup -o table extension list
+
+# Upgrade a single extension to the latest release
+pup extension upgrade my-tool
+
+# Upgrade all installed extensions
+pup extension upgrade --all
 
 # Remove an extension
 pup extension remove my-tool
@@ -136,6 +152,41 @@ pup my-tool plan --workspace prod --var-file vars.tfvars
 
 ## Installation Details
 
+### GitHub install
+
+```bash
+pup extension install owner/repo
+```
+
+Downloads the platform-specific binary from the repository's latest GitHub Release and installs it. The extension name is derived from the repo name (stripping the `pup-` prefix if present). For example, `jkirsteins/pup-hello` installs as `hello`.
+
+GitHub releases must include assets following the naming convention:
+
+```
+pup-<name>-<os>-<arch>
+```
+
+Where:
+- `<name>` is the extension name (e.g., `hello`)
+- `<os>` is one of: `darwin`, `linux`, `windows`
+- `<arch>` is one of: `x86_64`, `aarch64`
+
+Example assets for an extension named `hello`:
+
+```
+pup-hello-darwin-aarch64
+pup-hello-darwin-x86_64
+pup-hello-linux-aarch64
+pup-hello-linux-x86_64
+pup-hello-windows-x86_64.exe
+```
+
+To install a specific release tag:
+
+```bash
+pup extension install owner/repo --tag v1.0.0
+```
+
 ### Local install (copy)
 
 ```bash
@@ -158,15 +209,40 @@ Creates a symlink instead of copying. Useful during development so changes to th
 pup extension install --local /path/to/my-binary --name my-tool
 ```
 
-By default, the extension name is derived from the filename (stripping `pup-` prefix and `.exe` suffix). Use `--name` to override.
+By default, the extension name is derived from the filename (stripping `pup-` prefix and `.exe` suffix) for local installs, or from the repo name for GitHub installs. Use `--name` to override.
 
 ### Force reinstall
 
 ```bash
 pup extension install --local /path/to/pup-my-tool --force
+pup extension install owner/repo --force
 ```
 
 Overwrites an existing extension with the same name.
+
+## Upgrading Extensions
+
+### Upgrade a single extension
+
+```bash
+pup extension upgrade hello
+```
+
+Checks the GitHub release for a newer version. If one is available, downloads and installs it. If the extension is already at the latest version, prints a message and does nothing.
+
+### Upgrade all extensions
+
+```bash
+pup extension upgrade --all
+```
+
+Iterates through all installed extensions. GitHub-sourced extensions are checked for updates and upgraded if a newer release is available. Local extensions are skipped with a message.
+
+Only GitHub-sourced extensions can be upgraded automatically. Extensions installed from local files must be reinstalled manually:
+
+```bash
+pup extension install --local /path/to/updated-binary --force
+```
 
 ## Extension Directory
 
@@ -204,9 +280,22 @@ To extract an existing pup feature into an extension:
 4. Remove the feature from pup's core `Commands` enum
 5. Distribute the extension binary separately
 
+## Demo Extension
+
+A demo extension is available for testing at [jkirsteins/pup-hello](https://github.com/jkirsteins/pup-hello):
+
+```bash
+pup extension install jkirsteins/pup-hello
+pup hello world
+# Output:
+# Hello from pup extension! (v1.1.0)
+# Site: datadoghq.com
+# Args: world
+```
+
 ## Limitations
 
-- **GitHub-based installation** (`pup extension install owner/repo`) is not yet implemented. Use `--local` for now.
-- **Extension upgrade** (`pup extension upgrade`) is not yet implemented.
+- **Public repositories only**: GitHub-based installation works with public repositories. Private repository support (token forwarding) is not implemented.
 - **Source must be a regular file**: `pup extension install --local` requires the source path to be a regular file, not a directory.
 - **Agent-mode help**: `pup --agent <ext-name> --help` prints pup's top-level schema, not the extension's help. In normal mode, `--help` is passed through to the extension.
+- **No signing or verification**: Downloaded binaries are not cryptographically verified. Only install extensions from trusted sources.
