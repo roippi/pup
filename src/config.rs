@@ -10,6 +10,10 @@ pub struct Config {
     pub api_key: Option<String>,
     pub app_key: Option<String>,
     pub access_token: Option<String>,
+    /// Space-separated OAuth2 scopes from the current access token.
+    /// None when using API key auth, or when the token was loaded from DD_ACCESS_TOKEN
+    /// (env var path does not carry scope information). Used only for UX preflight checks.
+    pub token_scopes: Option<String>,
     pub site: String,
     pub org: Option<String>,
     pub output_format: OutputFormat,
@@ -102,12 +106,23 @@ impl Config {
 
         // If no token from env/file, try loading from keychain/storage (where `pup auth login` saves)
         #[cfg(not(target_arch = "wasm32"))]
-        let access_token = access_token.or_else(|| load_token_from_storage(&site, org.as_deref()));
+        let (access_token, loaded_token_scopes) = match access_token {
+            Some(t) => (Some(t), None::<String>), // token from env var or config file: no scope info
+            None => match load_token_and_scopes_from_storage(&site, org.as_deref()) {
+                Some((t, s)) => (Some(t), Some(s)),
+                None => (None, None),
+            },
+        };
+
+        // For WASM target where load_token_and_scopes_from_storage isn't available:
+        #[cfg(target_arch = "wasm32")]
+        let loaded_token_scopes: Option<String> = None;
 
         let cfg = Config {
             api_key: env_or("DD_API_KEY", file_cfg.api_key),
             app_key: env_or("DD_APP_KEY", file_cfg.app_key),
             access_token,
+            token_scopes: loaded_token_scopes,
             site,
             org,
             output_format: env_or("DD_OUTPUT", file_cfg.output)
@@ -138,6 +153,7 @@ impl Config {
             api_key,
             app_key,
             access_token,
+            token_scopes: None,
             site: normalize_site(&site),
             org: None,
             output_format: OutputFormat::Json,
@@ -309,7 +325,7 @@ pub fn load_token_from_storage(site: &str, org: Option<&str>) -> Option<String> 
     });
 
     match result {
-        ResolvedToken::Valid(access_token) => Some(access_token),
+        ResolvedToken::Valid(token_set) => Some(token_set.access_token),
         ResolvedToken::Refreshed(new_tokens) => {
             let guard = crate::auth::storage::get_storage().ok()?;
             let lock = guard.lock().ok()?;
@@ -317,6 +333,46 @@ pub fn load_token_from_storage(site: &str, org: Option<&str>) -> Option<String> 
             store.save_tokens(site, org, &new_tokens).ok()?;
             eprintln!("🔄 Access token refreshed automatically.");
             Some(new_tokens.access_token)
+        }
+        ResolvedToken::Expired => None,
+    }
+}
+
+/// Load a valid access token and its scope string from keychain/file storage.
+/// Returns None on any error or if no token is found.
+/// Returns (access_token, scope_string) where scope_string is space-separated OAuth2 scopes.
+#[cfg(all(not(feature = "browser"), not(target_arch = "wasm32")))]
+pub fn load_token_and_scopes_from_storage(
+    site: &str,
+    org: Option<&str>,
+) -> Option<(String, String)> {
+    let guard = crate::auth::storage::get_storage().ok()?;
+    let lock = guard.lock().ok()?;
+    let store = lock.as_ref()?;
+    let tokens = store.load_tokens(site, org).ok()??;
+    let creds = store.load_client_credentials(site).ok().flatten();
+    drop(lock);
+
+    let result = resolve_token(tokens, creds.as_ref(), |refresh_token, creds| {
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async {
+                let dcr_client = crate::auth::dcr::DcrClient::new(site);
+                dcr_client.refresh_token(refresh_token, creds).await.ok()
+            })
+        })
+    });
+
+    match result {
+        ResolvedToken::Valid(token_set) => Some((token_set.access_token, token_set.scope)),
+        ResolvedToken::Refreshed(new_tokens) => {
+            let scope = new_tokens.scope.clone();
+            let access_token = new_tokens.access_token.clone();
+            let guard = crate::auth::storage::get_storage().ok()?;
+            let lock = guard.lock().ok()?;
+            let store = lock.as_ref()?;
+            store.save_tokens(site, org, &new_tokens).ok()?;
+            eprintln!("🔄 Access token refreshed automatically.");
+            Some((access_token, scope))
         }
         ResolvedToken::Expired => None,
     }
@@ -341,7 +397,7 @@ fn has_stored_refresh_token(site: &str, org: Option<&str>) -> bool {
 
 #[cfg(all(not(feature = "browser"), not(target_arch = "wasm32")))]
 enum ResolvedToken {
-    Valid(String),
+    Valid(crate::auth::types::TokenSet),
     Refreshed(crate::auth::types::TokenSet),
     Expired,
 }
@@ -356,7 +412,7 @@ where
     F: FnOnce(&str, &crate::auth::types::ClientCredentials) -> Option<crate::auth::types::TokenSet>,
 {
     if !tokens.is_expired() {
-        return ResolvedToken::Valid(tokens.access_token);
+        return ResolvedToken::Valid(tokens);
     }
 
     if tokens.refresh_token.is_empty() {
@@ -474,6 +530,7 @@ mod tests {
             api_key: api_key.map(String::from),
             app_key: app_key.map(String::from),
             access_token: token.map(String::from),
+            token_scopes: None,
             site: "datadoghq.com".into(),
             org: None,
             output_format: OutputFormat::Json,
@@ -1019,7 +1076,7 @@ profiles:
             panic!("refresh_fn should not be called for valid token");
         });
         match result {
-            super::ResolvedToken::Valid(t) => assert_eq!(t, "old-access-token"),
+            super::ResolvedToken::Valid(t) => assert_eq!(t.access_token, "old-access-token"),
             _ => panic!("expected Valid"),
         }
     }

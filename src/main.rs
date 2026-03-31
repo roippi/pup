@@ -2131,6 +2131,10 @@ enum ExtensionActions {
         /// Short description shown in `pup help`
         #[arg(long)]
         description: Option<String>,
+        /// Comma-separated OAuth2 scopes this extension requires (e.g. monitors_read,monitors_write).
+        /// Stored in the manifest and checked at invocation time.
+        #[arg(long, help = "Comma-separated OAuth2 scopes this extension requires")]
+        scopes: Option<String>,
     },
     /// Remove an installed extension
     Remove {
@@ -6629,7 +6633,8 @@ async fn main_inner() -> anyhow::Result<()> {
                 if let Some(ext_path) = extensions::extension_path(candidate) {
                     let mut cfg = config::Config::from_env()?;
                     parsed.globals.apply_to(&mut cfg);
-                    let exit_code = extensions::exec_extension(&ext_path, &parsed.ext_args, &cfg)?;
+                    let exit_code =
+                        extensions::exec_extension(candidate, &ext_path, &parsed.ext_args, &cfg)?;
                     std::process::exit(exit_code);
                 }
             }
@@ -6714,6 +6719,56 @@ async fn main_inner() -> anyhow::Result<()> {
                     );
                 }
             }
+        }
+    }
+
+    // --- OAuth2 scope preflight check ---
+    // Derives the top-level command name for scope lookup and checks before dispatch.
+    // Fails fast with a clear error if required scopes are not covered by the current token.
+    // Bypassed for API key auth, missing scope info, or commands not in the scope table.
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let scope_cmd = match &cli.command {
+            Commands::Monitors { .. } => "monitors",
+            Commands::Logs { .. } => "logs",
+            Commands::Dashboards { .. } => "dashboards",
+            Commands::Metrics { .. } => "metrics",
+            Commands::Slos { .. } => "slos",
+            Commands::Synthetics { .. } => "synthetics",
+            Commands::Events { .. } => "events",
+            Commands::Downtime { .. } => "downtime",
+            Commands::Tags { .. } => "tags",
+            Commands::Users { .. } => "users",
+            Commands::Infrastructure { .. } => "infrastructure",
+            Commands::Idp { .. } => "idp",
+            Commands::AuditLogs { .. } => "audit-logs",
+            Commands::Security { .. } => "security",
+            Commands::Organizations { .. } => "organizations",
+            Commands::ChangeManagement { .. } => "change-management",
+            Commands::Cloud { .. } => "cloud",
+            Commands::Cases { .. } => "cases",
+            Commands::ServiceCatalog { .. } => "service-catalog",
+            Commands::ApiKeys { .. } => "api-keys",
+            Commands::AppKeys { .. } => "app-keys",
+            Commands::Usage { .. } => "usage",
+            Commands::Notebooks { .. } => "notebooks",
+            Commands::Rum { .. } => "rum",
+            Commands::Cicd { .. } => "cicd",
+            Commands::OnCall { .. } => "on-call",
+            Commands::Fleet { .. } => "fleet",
+            Commands::ErrorTracking { .. } => "error-tracking",
+            Commands::CodeCoverage { .. } => "code-coverage",
+            Commands::Integrations { .. } => "integrations",
+            Commands::Containers { .. } => "containers",
+            Commands::Apm { .. } => "apm",
+            Commands::Ddsql { .. } => "ddsql",
+            Commands::Investigations { .. } => "investigations",
+            Commands::ObsPipelines { .. } => "obs-pipelines",
+            Commands::Traces { .. } => "traces",
+            _ => "",
+        };
+        if !scope_cmd.is_empty() {
+            commands::scopes::check_command_scopes(scope_cmd, &cfg)?;
         }
     }
 
@@ -8915,6 +8970,7 @@ async fn main_inner() -> anyhow::Result<()> {
                 name,
                 force,
                 description,
+                scopes,
             } => {
                 commands::extension::install(
                     &cfg,
@@ -8926,6 +8982,7 @@ async fn main_inner() -> anyhow::Result<()> {
                         name,
                         force,
                         description,
+                        scopes,
                     },
                 )?;
             }

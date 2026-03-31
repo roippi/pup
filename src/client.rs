@@ -709,6 +709,7 @@ mod tests {
             api_key: Some("test".into()),
             app_key: Some("test".into()),
             access_token: None,
+            token_scopes: None,
             site: "datadoghq.com".into(),
             org: None,
             output_format: crate::config::OutputFormat::Json,

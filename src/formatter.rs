@@ -982,6 +982,7 @@ mod tests {
             api_key: None,
             app_key: None,
             access_token: None,
+            token_scopes: None,
             site: "datadoghq.com".into(),
             org: None,
             output_format: OutputFormat::Json,

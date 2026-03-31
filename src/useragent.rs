@@ -91,6 +91,22 @@ pub fn is_agent_mode() -> bool {
     is_env_truthy("FORCE_AGENT_MODE") || detect_agent_info().detected
 }
 
+/// Build the User-Agent string for an extension-invoked Datadog API call.
+/// Format: `pup/<pup-version> extension/<ext-name>/<ext-version>`
+/// Example: `pup/0.39.0 extension/hello/1.2.3`
+///
+/// This string is injected as `PUP_USER_AGENT` into the extension's environment.
+/// Extensions should use it as (or incorporate it into) their User-Agent header
+/// when constructing their Datadog API client.
+pub fn get_for_extension(ext_name: &str, ext_version: &str) -> String {
+    format!(
+        "pup/{} extension/{}/{}",
+        version::VERSION,
+        ext_name,
+        ext_version
+    )
+}
+
 #[allow(dead_code)]
 pub fn get() -> String {
     let agent = detect_agent_info();
@@ -254,5 +270,43 @@ mod tests {
             assert!(!det.name.is_empty());
             assert!(!det.env_vars.is_empty());
         }
+    }
+
+    #[test]
+    fn test_get_for_extension_format() {
+        let ua = get_for_extension("hello", "1.2.3");
+        assert!(ua.starts_with("pup/"), "should start with pup/: {ua}");
+        assert!(
+            ua.contains("extension/hello/1.2.3"),
+            "should contain extension id: {ua}"
+        );
+        // Format: pup/<version> extension/<name>/<version>
+        let parts: Vec<&str> = ua.splitn(2, ' ').collect();
+        assert_eq!(
+            parts.len(),
+            2,
+            "should have exactly two space-separated segments"
+        );
+        assert!(
+            parts[1].starts_with("extension/"),
+            "second segment should start with extension/: {ua}"
+        );
+    }
+
+    #[test]
+    fn test_get_for_extension_uses_pup_version() {
+        let ua = get_for_extension("myext", "0.1.0");
+        assert!(
+            ua.contains(version::VERSION),
+            "should embed pup version: {ua}"
+        );
+    }
+
+    #[test]
+    fn test_get_for_extension_example() {
+        // Canonical example from the spec: pup/0.39.0 extension/hello/1.2.3
+        // We can't hard-code the version but we can verify the structure.
+        let ua = get_for_extension("hello", "1.2.3");
+        assert!(ua.contains("extension/hello/1.2.3"), "{ua}");
     }
 }

@@ -2,6 +2,7 @@ use anyhow::{bail, Context, Result};
 use std::path::Path;
 
 use super::discovery::extension_dir;
+use super::lockfile;
 use super::manifest::Manifest;
 use crate::version;
 
@@ -231,6 +232,7 @@ pub fn install_from_github(
     name_override: Option<&str>,
     force: bool,
     description: Option<&str>,
+    required_scopes: Vec<String>,
 ) -> Result<()> {
     let (owner, repo) = parse_owner_repo(source)?;
     // The asset name is always derived from the repo (e.g., "hello" from "pup-hello").
@@ -278,6 +280,7 @@ pub fn install_from_github(
 
     let exe_name = write_extension_binary(&ext_dir, &ext_name, &asset_bytes)?;
 
+    let exe_name_for_lock = exe_name.clone();
     let manifest = Manifest {
         name: ext_name.clone(),
         version: release_version,
@@ -286,8 +289,28 @@ pub fn install_from_github(
         binary: exe_name,
         description: description.unwrap_or_default().to_string(),
         installed_by_pup: version::VERSION.to_string(),
+        required_scopes,
     };
     manifest.save(&ext_dir.join("manifest.json"))?;
+
+    // Update lock file: record version + checksum of the newly installed binary.
+    let bin_path = ext_dir.join(&exe_name_for_lock);
+    let checksum = lockfile::sha256_of_file(&bin_path)
+        .with_context(|| format!("computing checksum for extension '{ext_name}'"))?;
+    if let Some(lock_path) = lockfile::lockfile_path() {
+        let mut lock = lockfile::LockFile::load(&lock_path)
+            .with_context(|| format!("reading lock file before installing '{ext_name}' — if corrupt, remove it and reinstall all extensions"))?;
+        lock.set(
+            &ext_name,
+            lockfile::LockEntry {
+                version: manifest.version.clone(),
+                sha256: checksum,
+                source: manifest.source.clone(),
+            },
+        );
+        lock.save(&lock_path)
+            .with_context(|| format!("writing lock file after installing '{ext_name}'"))?;
+    }
 
     Ok(())
 }
@@ -378,6 +401,24 @@ pub fn upgrade_extension(name: &str) -> Result<String> {
     };
     updated_manifest.save(&ext_dir.join("manifest.json"))?;
 
+    let bin_path = ext_dir.join(&updated_manifest.binary);
+    let checksum = lockfile::sha256_of_file(&bin_path)
+        .with_context(|| format!("computing checksum for upgraded extension '{name}'"))?;
+    if let Some(lock_path) = lockfile::lockfile_path() {
+        let mut lock = lockfile::LockFile::load(&lock_path)
+            .with_context(|| format!("reading lock file before upgrading '{name}' — if corrupt, remove it and reinstall all extensions"))?;
+        lock.set(
+            name,
+            lockfile::LockEntry {
+                version: updated_manifest.version.clone(),
+                sha256: checksum,
+                source: updated_manifest.source.clone(),
+            },
+        );
+        lock.save(&lock_path)
+            .with_context(|| format!("writing lock file after upgrading '{name}'"))?;
+    }
+
     Ok(format!("{name}: upgraded {old_version} -> {new_version}"))
 }
 
@@ -445,6 +486,7 @@ pub fn install_from_local(
     link: bool,
     force: bool,
     description: Option<&str>,
+    required_scopes: Vec<String>,
 ) -> Result<()> {
     validate_extension_name(name)?;
 
@@ -514,6 +556,7 @@ pub fn install_from_local(
     };
 
     // Local installs have no version source (unlike GitHub releases which provide a tag).
+    let exe_name_for_lock = exe_name.clone();
     let manifest = Manifest {
         name: name.to_string(),
         version: "unknown".to_string(),
@@ -522,8 +565,27 @@ pub fn install_from_local(
         binary: exe_name,
         description: description.unwrap_or_default().to_string(),
         installed_by_pup: version::VERSION.to_string(),
+        required_scopes,
     };
     manifest.save(&ext_dir.join("manifest.json"))?;
+
+    let bin_path = ext_dir.join(&exe_name_for_lock);
+    let checksum = lockfile::sha256_of_file(&bin_path)
+        .with_context(|| format!("computing checksum for extension '{name}'"))?;
+    if let Some(lock_path) = lockfile::lockfile_path() {
+        let mut lock = lockfile::LockFile::load(&lock_path)
+            .with_context(|| format!("reading lock file before installing '{name}' — if corrupt, remove it and reinstall all extensions"))?;
+        lock.set(
+            name,
+            lockfile::LockEntry {
+                version: manifest.version.clone(),
+                sha256: checksum,
+                source: manifest.source.clone(),
+            },
+        );
+        lock.save(&lock_path)
+            .with_context(|| format!("writing lock file after installing '{name}'"))?;
+    }
 
     Ok(())
 }
@@ -541,6 +603,14 @@ pub fn remove_extension(name: &str) -> Result<()> {
     }
 
     std::fs::remove_dir_all(&ext_dir).with_context(|| format!("removing {}", ext_dir.display()))?;
+
+    if let Some(lock_path) = lockfile::lockfile_path() {
+        if let Ok(mut lock) = lockfile::LockFile::load(&lock_path) {
+            lock.remove(name);
+            let _ = lock.save(&lock_path); // best-effort — removal already succeeded
+        }
+    }
+
     Ok(())
 }
 

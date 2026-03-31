@@ -48,6 +48,7 @@ pub mod reference_tables;
 pub mod rum;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod runbooks;
+pub mod scopes;
 pub mod scorecards;
 pub mod seats;
 pub mod security;

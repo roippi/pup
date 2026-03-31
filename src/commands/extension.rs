@@ -65,6 +65,7 @@ pub struct InstallOptions {
     pub name: Option<String>,
     pub force: bool,
     pub description: Option<String>,
+    pub scopes: Option<String>, // comma-separated scope list
 }
 
 /// Install an extension from a source.
@@ -77,7 +78,15 @@ pub fn install(_cfg: &Config, opts: InstallOptions) -> Result<()> {
         name,
         force,
         description,
+        scopes,
     } = opts;
+
+    // Parse comma-separated scopes into Vec<String>
+    let required_scopes: Vec<String> = scopes
+        .as_deref()
+        .map(crate::config::parse_scopes)
+        .unwrap_or_default();
+
     if local {
         let source_path = PathBuf::from(&source);
         // Derive name from filename if not provided.
@@ -107,6 +116,7 @@ pub fn install(_cfg: &Config, opts: InstallOptions) -> Result<()> {
             link,
             force,
             description.as_deref(),
+            required_scopes.clone(),
         )?;
         if link {
             println!("Linked extension '{ext_name}' from {source}");
@@ -123,6 +133,7 @@ pub fn install(_cfg: &Config, opts: InstallOptions) -> Result<()> {
         name.as_deref(),
         force,
         description.as_deref(),
+        required_scopes,
     )?;
 
     let display_name = name.unwrap_or_else(|| {

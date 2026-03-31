@@ -11,6 +11,10 @@ pub struct Manifest {
     pub binary: String,
     pub description: String,
     pub installed_by_pup: String,
+    /// OAuth2 scopes this extension declares as required. Empty = no requirement declared.
+    /// Absent in JSON (legacy manifests) deserializes as empty Vec via #[serde(default)].
+    #[serde(default)]
+    pub required_scopes: Vec<String>,
 }
 
 impl Manifest {
@@ -42,6 +46,7 @@ mod tests {
             binary: "pup-hello".to_string(),
             description: "A hello world extension".to_string(),
             installed_by_pup: "0.39.0".to_string(),
+            required_scopes: vec![],
         }
     }
 

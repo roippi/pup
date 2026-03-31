@@ -104,6 +104,7 @@ Extensions receive pup's auth credentials via environment variables. This means 
 | `PUP_AUTO_APPROVE` | `--yes` flag or agent mode | `true` |
 | `PUP_READ_ONLY` | Read-only mode | `true` |
 | `PUP_AGENT_MODE` | Agent mode | `true` |
+| `PUP_USER_AGENT` | Always (when spawned via pup) | `pup/<version> extension/<name>/<version>` |
 
 Pup refreshes the OAuth2 token if needed before passing it to the extension, so extensions always receive a valid token.
 
@@ -126,6 +127,36 @@ headers = {"Authorization": f"Bearer {token}"} if token else {
 resp = requests.get(f"https://api.{site}/api/v1/dashboard", headers=headers)
 print(resp.json())
 ```
+
+### User-Agent attribution
+
+When pup spawns an extension, it sets the `PUP_USER_AGENT` environment variable to a string that identifies both pup and the extension:
+
+```
+pup/<pup-version> extension/<ext-name>/<ext-version>
+```
+
+Example: `pup/0.41.0 extension/hello/1.2.3`
+
+Extensions should read this variable and use it as (or incorporate it into) the `User-Agent` HTTP header when constructing their Datadog API client. This allows Datadog to attribute extension-induced API traffic back to the specific extension.
+
+```bash
+# Shell: use PUP_USER_AGENT as your User-Agent header
+curl -H "User-Agent: ${PUP_USER_AGENT}" \
+     -H "DD-API-KEY: ${DD_API_KEY}" \
+     "https://api.${DD_SITE}/api/v1/dashboard"
+```
+
+```python
+# Python: incorporate PUP_USER_AGENT into your HTTP client
+import os, requests
+
+ua = os.environ.get("PUP_USER_AGENT", f"extension/{os.path.basename(__file__)}")
+headers = {"User-Agent": ua, "DD-API-KEY": os.environ.get("DD_API_KEY", "")}
+resp = requests.get(f"https://api.{os.environ.get('DD_SITE','datadoghq.com')}/api/v1/dashboard", headers=headers)
+```
+
+If `PUP_USER_AGENT` is not set (e.g., the extension is invoked directly outside pup), fall back to your own identity string.
 
 ### Example: using auth in a Rust extension
 
@@ -220,6 +251,32 @@ pup extension install owner/repo --force
 
 Overwrites an existing extension with the same name.
 
+### Declaring required OAuth2 scopes
+
+```bash
+pup extension install owner/repo --scopes monitors_read,dashboards_read
+pup extension install --local ./pup-my-tool --scopes monitors_read,monitors_write
+```
+
+The `--scopes` flag accepts a comma-separated list of OAuth2 scope names. These are stored in the extension's manifest and checked at invocation time.
+
+**When the check fires**: only when the user is authenticated via OAuth2 (`pup auth login`) and the current token's scope list is available.
+
+**Bypassed when**:
+- Using API key auth (`DD_API_KEY` + `DD_APP_KEY`) — scopes are an OAuth2 concept
+- The token was provided via `DD_ACCESS_TOKEN` environment variable (no scope metadata available)
+- The extension declares no required scopes
+
+**Error example** when scopes are missing:
+
+```
+extension 'my-tool' requires OAuth2 scopes that your current token does not cover.
+Missing scopes: monitors_read
+Run 'pup auth login' to obtain a new token with the required scopes.
+```
+
+Scopes are preserved across upgrades — `pup extension upgrade` carries forward the `required_scopes` from the installed manifest.
+
 ## Upgrading Extensions
 
 ### Upgrade a single extension
@@ -249,11 +306,17 @@ pup extension install --local /path/to/updated-binary --force
 Extensions are stored in pup's config directory:
 
 ```
-<config_dir>/extensions/
-  pup-my-tool/
-    pup-my-tool          # the executable
-    manifest.json        # metadata (written by pup at install time)
+<config_dir>/
+  extensions.lock          # version + SHA256 pin per extension (written by pup)
+  extensions/
+    pup-my-tool/
+      pup-my-tool          # the executable
+      manifest.json        # metadata (written by pup at install time)
 ```
+
+`extensions.lock` is a JSON file maintained by pup. It records the installed version and SHA256 checksum of each extension binary. On every invocation, pup verifies the on-disk binary against the stored checksum. If the binary has been modified since installation, pup refuses to run it with an error.
+
+Symlinked extensions (installed with `--link`) are exempt — the symlink target is user-controlled and may change legitimately during development.
 
 The config directory location depends on your platform:
 - **macOS**: `~/Library/Application Support/pup/extensions/`
@@ -371,4 +434,5 @@ pup hello world
 - **Public repositories only**: GitHub-based installation works with public repositories. Private repository support (token forwarding) is not implemented.
 - **Source must be a regular file**: `pup extension install --local` requires the source path to be a regular file, not a directory.
 - **Agent-mode help**: `pup --agent <ext-name> --help` prints pup's top-level schema, not the extension's help. In normal mode, `--help` is passed through to the extension.
-- **No signing or verification**: Downloaded binaries are not cryptographically verified. Only install extensions from trusted sources.
+- **Checksum verification**: pup verifies the SHA256 of each extension binary against the lock file on every invocation. Symlinked (development) installs are exempt. If an extension binary has been modified since installation, pup refuses to run it with an actionable error (`pup extension install <name> --force` to reinstall).
+- **No code-signing**: Binaries are verified by SHA256 checksum (tamper detection) but not by cryptographic code signature. Only install extensions from trusted sources.

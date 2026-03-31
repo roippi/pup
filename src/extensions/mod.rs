@@ -1,6 +1,7 @@
 pub mod discovery;
 pub mod exec;
 pub mod install;
+pub mod lockfile;
 pub mod manifest;
 
 pub use discovery::extension_path;
@@ -134,7 +135,16 @@ impl PreParsedGlobals {
                 .filter(|s| !s.is_empty())
                 .is_none()
             {
-                cfg.access_token = config::load_token_from_storage(&cfg.site, cfg.org.as_deref());
+                match config::load_token_and_scopes_from_storage(&cfg.site, cfg.org.as_deref()) {
+                    Some((token, scopes)) => {
+                        cfg.access_token = Some(token);
+                        cfg.token_scopes = Some(scopes);
+                    }
+                    None => {
+                        cfg.access_token = None;
+                        cfg.token_scopes = None;
+                    }
+                }
             }
         }
     }

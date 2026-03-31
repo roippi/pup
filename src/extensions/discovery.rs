@@ -191,6 +191,7 @@ mod tests {
             binary: "pup-hello".to_string(),
             description: "Hello world".to_string(),
             installed_by_pup: "0.39.0".to_string(),
+            required_scopes: vec![],
         };
         manifest.save(&ext_dir.join("manifest.json")).unwrap();
 
@@ -237,6 +238,7 @@ mod tests {
                 binary: format!("pup-{name}"),
                 description: desc.to_string(),
                 installed_by_pup: "0.39.0".to_string(),
+                required_scopes: vec![],
             };
             manifest.save(&ext_dir.join("manifest.json")).unwrap();
         }
@@ -270,6 +272,7 @@ mod tests {
             binary: "pup-nodesc".to_string(),
             description: String::new(),
             installed_by_pup: "0.39.0".to_string(),
+            required_scopes: vec![],
         };
         manifest.save(&ext_dir.join("manifest.json")).unwrap();
 
