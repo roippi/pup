@@ -4,6 +4,8 @@ mod auth;
 mod client;
 mod commands;
 mod config;
+#[cfg(not(target_arch = "wasm32"))]
+mod extensions;
 mod formatter;
 mod skills;
 #[cfg(not(target_arch = "wasm32"))]
@@ -2037,8 +2039,73 @@ enum Commands {
         #[command(subcommand)]
         action: ReferenceTablesActions,
     },
+    /// Manage pup extensions
+    ///
+    /// Install, list, remove, and upgrade pup extensions.
+    /// Extensions are external executables that add new subcommands to pup.
+    ///
+    /// COMMANDS:
+    ///   list      List installed extensions
+    ///   install   Install an extension from a local path or GitHub repo
+    ///   remove    Remove an installed extension
+    ///   upgrade   Upgrade an extension to the latest version
+    ///
+    /// EXAMPLES:
+    ///   pup extension list
+    ///   pup extension install --local /path/to/pup-my-tool
+    ///   pup extension remove my-tool
+    #[cfg(not(target_arch = "wasm32"))]
+    #[command(verbatim_doc_comment)]
+    Extension {
+        #[command(subcommand)]
+        action: ExtensionActions,
+    },
     /// Print version information
     Version,
+}
+
+// ---- Extensions ----
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Subcommand)]
+enum ExtensionActions {
+    /// List installed extensions
+    List,
+    /// Install an extension
+    Install {
+        /// Source: local file path (with --local) or GitHub owner/repo
+        source: String,
+        /// Install a specific release tag (GitHub only)
+        #[arg(long)]
+        tag: Option<String>,
+        /// Install from a local file path
+        #[arg(long)]
+        local: bool,
+        /// Symlink instead of copy (with --local)
+        #[arg(long)]
+        link: bool,
+        /// Install from a direct URL
+        #[arg(long)]
+        url: bool,
+        /// Extension name (auto-derived from source if omitted)
+        #[arg(long)]
+        name: Option<String>,
+        /// Overwrite an existing extension
+        #[arg(long)]
+        force: bool,
+    },
+    /// Remove an installed extension
+    Remove {
+        /// Extension name (without pup- prefix)
+        name: String,
+    },
+    /// Upgrade an extension to the latest version
+    Upgrade {
+        /// Extension name (or omit with --all)
+        name: Option<String>,
+        /// Upgrade all installed extensions
+        #[arg(long)]
+        all: bool,
+    },
 }
 
 // ---- Monitors ----
@@ -6299,6 +6366,24 @@ async fn main_inner() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    // --- Extension interception (before clap parsing) ---
+    // If the first positional arg is not a built-in command but matches an
+    // installed extension, dispatch to it directly and bypass clap entirely.
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let parsed = extensions::parse_extension_args(&args);
+        if let Some(ref candidate) = parsed.candidate {
+            if !extensions::is_builtin_command(candidate) {
+                if let Some(ext_path) = extensions::extension_path(candidate) {
+                    let mut cfg = config::Config::from_env()?;
+                    parsed.globals.apply_to(&mut cfg);
+                    let exit_code = extensions::exec_extension(&ext_path, &parsed.ext_args, &cfg)?;
+                    std::process::exit(exit_code);
+                }
+            }
+        }
+    }
+
     let matches = Cli::command().get_matches();
     let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
 
@@ -8535,6 +8620,26 @@ async fn main_inner() -> anyhow::Result<()> {
                 }
             }
         }
+        // --- Extensions ---
+        #[cfg(not(target_arch = "wasm32"))]
+        Commands::Extension { action } => match action {
+            ExtensionActions::List => commands::extension::list(&cfg)?,
+            ExtensionActions::Install {
+                source,
+                tag,
+                local,
+                link,
+                url,
+                name,
+                force,
+            } => {
+                commands::extension::install(&cfg, source, tag, local, link, url, name, force)?;
+            }
+            ExtensionActions::Remove { name } => commands::extension::remove(&cfg, name)?,
+            ExtensionActions::Upgrade { name, all } => {
+                commands::extension::upgrade(&cfg, name, all)?;
+            }
+        },
         // --- Utility ---
         #[cfg(not(target_arch = "wasm32"))]
         Commands::Completions { shell, install } => {
