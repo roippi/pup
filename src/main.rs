@@ -2034,6 +2034,30 @@ enum Commands {
         #[command(subcommand)]
         action: SyntheticsActions,
     },
+    /// Manage Test Optimization settings and flaky tests
+    ///
+    /// Configure Test Optimization service settings and manage flaky tests
+    /// through the Datadog Test Optimization API.
+    ///
+    /// CAPABILITIES:
+    ///   • Get, update, or delete service-level Test Optimization settings
+    ///   • Search for flaky tests across your test suites
+    ///   • Update flaky test state (e.g. mark as known flaky)
+    ///
+    /// EXAMPLES:
+    ///   # Get service settings
+    ///   pup test-optimization settings get --file=body.json
+    ///
+    ///   # Search for flaky tests
+    ///   pup test-optimization flaky-tests search
+    ///
+    /// AUTHENTICATION:
+    ///   Requires either OAuth2 authentication or API keys.
+    #[command(name = "test-optimization", verbatim_doc_comment)]
+    TestOptimization {
+        #[command(subcommand)]
+        action: TestOptimizationActions,
+    },
     /// Manage host tags
     ///
     /// Manage tags for hosts in your infrastructure.
@@ -2763,6 +2787,11 @@ enum SyntheticsActions {
         #[command(subcommand)]
         action: SyntheticsSuiteActions,
     },
+    /// Manage multistep API tests
+    Multistep {
+        #[command(subcommand)]
+        action: SyntheticsMultistepActions,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2811,6 +2840,46 @@ enum SyntheticsTestActions {
         #[arg(long, default_value_t = 1800)]
         timeout: u64,
     },
+    /// Get a fast (latest) test result by result ID
+    GetFastResult {
+        /// Result ID
+        result_id: String,
+    },
+    /// Get a specific version of a synthetic test
+    GetVersion {
+        /// Public ID of the test
+        public_id: String,
+        /// Version number to retrieve
+        version: i64,
+        /// Include change metadata in the response
+        #[arg(long)]
+        include_change_metadata: bool,
+    },
+    /// List version history for a synthetic test
+    ListVersions {
+        /// Public ID of the test
+        public_id: String,
+        /// Maximum number of versions to return per page
+        #[arg(long)]
+        limit: Option<i64>,
+        /// Version number of the last item from the previous page
+        #[arg(long)]
+        last_version_number: Option<i64>,
+    },
+}
+
+#[derive(Subcommand)]
+enum SyntheticsMultistepActions {
+    /// Get subtests for a multistep API test
+    GetSubtests {
+        /// Public ID of the multistep test
+        public_id: String,
+    },
+    /// Get parent tests for a multistep API subtest
+    GetSubtestParents {
+        /// Public ID of the subtest
+        public_id: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -2845,6 +2914,55 @@ enum SyntheticsSuiteActions {
         suite_ids: Vec<String>,
         #[arg(long, help = "Comma-separated suite public IDs (required)")]
         ids: Option<String>,
+    },
+}
+
+// ---- Test Optimization ----
+#[derive(Subcommand)]
+enum TestOptimizationActions {
+    /// Manage Test Optimization service settings
+    Settings {
+        #[command(subcommand)]
+        action: TestOptimizationSettingsActions,
+    },
+    /// Manage flaky tests
+    #[command(name = "flaky-tests")]
+    FlakyTests {
+        #[command(subcommand)]
+        action: TestOptimizationFlakyTestsActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum TestOptimizationSettingsActions {
+    /// Get Test Optimization service settings (body from JSON file)
+    Get {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Update Test Optimization service settings (body from JSON file)
+    Update {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Delete Test Optimization service settings (body from JSON file)
+    Delete {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum TestOptimizationFlakyTestsActions {
+    /// Search for flaky tests
+    Search {
+        #[arg(long, help = "Optional JSON file with search request body")]
+        file: Option<String>,
+    },
+    /// Update flaky test state (body from JSON file)
+    Update {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
     },
 }
 
@@ -7393,6 +7511,35 @@ async fn main_inner() -> anyhow::Result<()> {
                     } => {
                         commands::synthetics::tests_run(&cfg, public_ids, tunnel, timeout).await?;
                     }
+                    SyntheticsTestActions::GetFastResult { result_id } => {
+                        commands::synthetics::tests_get_fast_result(&cfg, &result_id).await?;
+                    }
+                    SyntheticsTestActions::GetVersion {
+                        public_id,
+                        version,
+                        include_change_metadata,
+                    } => {
+                        commands::synthetics::tests_get_version(
+                            &cfg,
+                            &public_id,
+                            version,
+                            include_change_metadata,
+                        )
+                        .await?;
+                    }
+                    SyntheticsTestActions::ListVersions {
+                        public_id,
+                        limit,
+                        last_version_number,
+                    } => {
+                        commands::synthetics::tests_list_versions(
+                            &cfg,
+                            &public_id,
+                            limit,
+                            last_version_number,
+                        )
+                        .await?;
+                    }
                 },
                 SyntheticsActions::Locations { action } => match action {
                     SyntheticsLocationActions::List => {
@@ -7414,6 +7561,40 @@ async fn main_inner() -> anyhow::Result<()> {
                     }
                     SyntheticsSuiteActions::Delete { suite_ids, .. } => {
                         commands::synthetics::suites_delete(&cfg, suite_ids).await?;
+                    }
+                },
+                SyntheticsActions::Multistep { action } => match action {
+                    SyntheticsMultistepActions::GetSubtests { public_id } => {
+                        commands::synthetics::multistep_get_subtests(&cfg, &public_id).await?;
+                    }
+                    SyntheticsMultistepActions::GetSubtestParents { public_id } => {
+                        commands::synthetics::multistep_get_subtest_parents(&cfg, &public_id)
+                            .await?;
+                    }
+                },
+            }
+        }
+        // --- Test Optimization ---
+        Commands::TestOptimization { action } => {
+            cfg.validate_auth()?;
+            match action {
+                TestOptimizationActions::Settings { action } => match action {
+                    TestOptimizationSettingsActions::Get { file } => {
+                        commands::test_optimization::settings_get(&cfg, &file).await?;
+                    }
+                    TestOptimizationSettingsActions::Update { file } => {
+                        commands::test_optimization::settings_update(&cfg, &file).await?;
+                    }
+                    TestOptimizationSettingsActions::Delete { file } => {
+                        commands::test_optimization::settings_delete(&cfg, &file).await?;
+                    }
+                },
+                TestOptimizationActions::FlakyTests { action } => match action {
+                    TestOptimizationFlakyTestsActions::Search { file } => {
+                        commands::test_optimization::flaky_tests_search(&cfg, file).await?;
+                    }
+                    TestOptimizationFlakyTestsActions::Update { file } => {
+                        commands::test_optimization::flaky_tests_update(&cfg, &file).await?;
                     }
                 },
             }

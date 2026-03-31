@@ -60,6 +60,7 @@ pub mod static_analysis;
 pub mod status_pages;
 pub mod synthetics;
 pub mod tags;
+pub mod test_optimization;
 pub mod test;
 pub mod traces;
 pub mod usage;
