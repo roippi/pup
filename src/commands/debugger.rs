@@ -431,6 +431,74 @@ pub async fn probes_watch(
     anyhow::bail!("watch is not supported in wasm builds")
 }
 
+// --- Context subcommand ---
+
+pub async fn context(
+    cfg: &Config,
+    service: &str,
+    env: Option<&str>,
+    fields: Option<&str>,
+) -> Result<()> {
+    let path = "/api/unstable/debugger/live-debugger/service-context";
+    let data = get(cfg, path, &[("service", service)]).await?;
+
+    let data = match env {
+        Some(env_filter) => filter_context_env(&data, env_filter),
+        None => data,
+    };
+
+    match fields {
+        Some(field_list) => formatter::output(cfg, &extract_context_fields(&data, field_list)),
+        None => formatter::output(cfg, &data),
+    }
+}
+
+fn extract_context_fields(data: &serde_json::Value, field_list: &str) -> serde_json::Value {
+    let attrs = &data["data"]["attributes"];
+    let mut obj = serde_json::Map::new();
+    for field in field_list.split(',').map(|f| f.trim()) {
+        match field {
+            "service" => {
+                if let Some(v) = attrs.get("service") {
+                    obj.insert("service".into(), v.clone());
+                }
+            }
+            "language" => {
+                if let Some(v) = attrs.get("language") {
+                    obj.insert("language".into(), v.clone());
+                }
+            }
+            "envs" => {
+                let envs: Vec<&str> = attrs["environments"]
+                    .as_array()
+                    .map(|arr| arr.iter().filter_map(|e| e["env"].as_str()).collect())
+                    .unwrap_or_default();
+                obj.insert("envs".into(), serde_json::json!(envs));
+            }
+            "repo" => {
+                if let Some(v) = attrs.get("git_repository_url") {
+                    obj.insert("repo".into(), v.clone());
+                }
+            }
+            other => {
+                eprintln!("unknown field: {other}");
+            }
+        }
+    }
+    serde_json::Value::Object(obj)
+}
+
+fn filter_context_env(data: &serde_json::Value, env_filter: &str) -> serde_json::Value {
+    let mut filtered = data.clone();
+    if let Some(envs) = filtered
+        .pointer_mut("/data/attributes/environments")
+        .and_then(|v| v.as_array_mut())
+    {
+        envs.retain(|e| e["env"].as_str() == Some(env_filter));
+    }
+    filtered
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -606,5 +674,47 @@ mod tests {
     fn test_extract_api_errors_no_errors_field() {
         let resp = serde_json::json!({ "data": {} });
         assert!(extract_api_errors(&resp).is_none());
+    }
+
+    fn sample_context_response() -> serde_json::Value {
+        serde_json::json!({
+            "data": {
+                "attributes": {
+                    "service": "my-service",
+                    "language": "java",
+                    "git_repository_url": "https://github.com/example/repo",
+                    "environments": [
+                        { "env": "staging", "instance_groups": [] },
+                        { "env": "production", "instance_groups": [] }
+                    ]
+                }
+            }
+        })
+    }
+
+    #[test]
+    fn test_extract_context_fields_envs() {
+        let data = sample_context_response();
+        let out = extract_context_fields(&data, "envs");
+        assert_eq!(out["envs"], serde_json::json!(["staging", "production"]));
+        assert!(out.get("service").is_none());
+    }
+
+    #[test]
+    fn test_extract_context_fields_all() {
+        let data = sample_context_response();
+        let out = extract_context_fields(&data, "service,language,envs,repo");
+        assert_eq!(out["service"], "my-service");
+        assert_eq!(out["language"], "java");
+        assert_eq!(out["envs"], serde_json::json!(["staging", "production"]));
+        assert_eq!(out["repo"], "https://github.com/example/repo");
+    }
+
+    #[test]
+    fn test_extract_context_fields_ignores_unknown() {
+        let data = sample_context_response();
+        let out = extract_context_fields(&data, "service,bogus");
+        assert_eq!(out["service"], "my-service");
+        assert!(out.get("bogus").is_none());
     }
 }

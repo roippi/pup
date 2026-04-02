@@ -2690,6 +2690,15 @@ enum DebuggerActions {
         #[command(subcommand)]
         action: DebuggerProbeActions,
     },
+    /// Show service debugger context (environments, probe support, language features)
+    Context {
+        #[arg(help = "Service name")]
+        service: String,
+        #[arg(long, help = "Filter to a specific environment")]
+        env: Option<String>,
+        #[arg(long, help = "Comma-separated fields: service, language, envs, repo")]
+        fields: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -7721,6 +7730,14 @@ async fn main_inner() -> anyhow::Result<()> {
                         .await?;
                     }
                 },
+                DebuggerActions::Context {
+                    service,
+                    env,
+                    fields,
+                } => {
+                    commands::debugger::context(&cfg, &service, env.as_deref(), fields.as_deref())
+                        .await?;
+                }
             }
         }
         // --- Metrics ---
