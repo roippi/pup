@@ -1,6 +1,6 @@
 # Pup - Datadog API CLI
 
-Rust-based CLI wrapper for Datadog APIs. Provides OAuth2 + API key authentication for 56 command groups with 320+ subcommands across 58 command modules.
+Rust-based CLI wrapper for Datadog APIs. Provides OAuth2 + API key authentication with 69 command modules and 325+ subcommands.
 
 ## Documentation Index
 
@@ -21,7 +21,8 @@ Rust-based CLI wrapper for Datadog APIs. Provides OAuth2 + API key authenticatio
 - **Test both paths.** Every change must include positive tests (happy path) and negative tests (error cases, bad input, edge cases).
 - **No malicious code.** Obfuscated logic, backdoors, exfiltration, or unauthorized network calls result in rejection and a ban.
 - **No vulnerable dependencies.** Only use latest stable crate versions with no known CVEs. Run `cargo audit` before submitting.
-- **Keep it simple.** Small functions, shallow nesting, no premature abstractions. If you need a comment to explain a line, rewrite the line instead.
+- **Keep it simple.** Small functions, shallow nesting, no premature abstractions. Prefer explicit over clever.
+- **Follow Rust standards.** `cargo fmt`, `cargo clippy -- -D warnings`, `anyhow` for errors, idiomatic `Option`/`Result` usage.
 - **Minimal diffs.** One concern per PR. Don't touch unrelated code, reformat untouched files, or add unnecessary improvements.
 
 ## Quick Start
@@ -53,7 +54,7 @@ pup metrics query --query="avg:system.cpu.user{*}" --from="1h"
 pup/
 ├── src/
 │   ├── main.rs            # CLI entry point, clap enums, command routing
-│   ├── commands/           # 59 command modules (monitors.rs, logs.rs, runbooks.rs, etc.)
+│   ├── commands/           # Command modules (monitors.rs, logs.rs, runbooks.rs, etc.)
 │   ├── auth/              # OAuth2 + DCR + PKCE + token storage
 │   ├── runbooks/          # Runbook engine (loader, template renderer, executor)
 │   ├── client.rs          # Datadog API client wrapper
@@ -188,7 +189,7 @@ See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for detailed workflow and examples.
 ## CI/CD Requirements
 
 **All PRs must pass:**
-- `cargo test` (60 unit tests)
+- `cargo test` (639+ unit tests)
 - `cargo clippy -- -D warnings`
 - `cargo fmt --check`
 - Cross-compilation for 4 targets
@@ -207,9 +208,9 @@ See [TESTING.md](docs/TESTING.md) for details.
 
 ## Implementation Status
 
-- **60 command modules** implemented (including runbooks engine)
-- **325+ subcommands** across 58 command groups
-- **60 unit tests** passing
+- **69 command modules** implemented (including runbooks engine)
+- **325+ subcommands** across all command groups
+- **639+ unit tests** passing
 - **155/155 API output** matches Go version exactly
 - **390/390 command descriptions** match Go version
 - **31% smaller binary**, 16% faster startup, 25% less memory vs Go

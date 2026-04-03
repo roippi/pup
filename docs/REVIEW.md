@@ -22,18 +22,19 @@ Every PR is evaluated against the following criteria. A failure in any **MUST** 
 
 ### 2. Test Coverage (MUST)
 
+See [TESTING.md](TESTING.md) for full test strategy, coverage thresholds, and conventions. Review-specific expectations:
+
 - **Positive tests required.** Every new public function or subcommand must have at least one test demonstrating correct behavior.
 - **Negative tests required.** Every error path, validation check, or fallible operation must have a test proving the failure mode works as intended (returns the right error, rejects bad input, etc.).
 - **No test regressions.** `cargo test` must pass with zero failures. Existing tests must not be deleted or weakened without justification.
-- **Test naming.** Use descriptive names: `test_<function>_<scenario>` (e.g. `test_parse_time_relative_1h`, `test_parse_time_invalid_format_returns_error`).
 
 ### 3. Security (MUST)
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) security guidelines for full details. Review-specific expectations:
 
 - **No malicious code.** PRs containing obfuscated code, backdoors, exfiltration attempts, unauthorized network calls, or any code that does not serve the stated purpose of the PR will be rejected and the contributor banned.
 - **No credential exposure.** Never log, print, or include in error messages: API keys, tokens, secrets, or passwords. Grep your diff for `DD_API_KEY`, `DD_APP_KEY`, access tokens, and similar patterns.
 - **Input validation at boundaries.** All user-supplied input (CLI args, environment variables, config file values) must be validated before use. Prevent command injection, path traversal, and other OWASP Top 10 vulnerabilities.
-- **PKCE S256 for OAuth2.** Never downgrade to plain PKCE or skip the challenge.
-- **AES-256-GCM for fallback token storage.** Never weaken encryption for convenience.
 
 ### 4. Dependency Hygiene (MUST)
 
@@ -59,6 +60,8 @@ Every PR is evaluated against the following criteria. A failure in any **MUST** 
 - **Descriptive title and body.** Follow the conventional commit format: `<type>(<scope>): <subject>`. Include what changed and why.
 
 ### 7. Rust-Specific Standards (MUST)
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) code style and error handling sections for full conventions. Review-enforced minimums:
 
 - **`cargo fmt`** — code must be formatted. CI enforces this.
 - **`cargo clippy -- -D warnings`** — no clippy warnings. CI enforces this.
