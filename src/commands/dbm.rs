@@ -20,6 +20,10 @@ fn build_search_body(
     limit: i32,
     sort: &str,
 ) -> Result<serde_json::Value> {
+    if limit <= 0 {
+        bail!("--limit must be a positive integer");
+    }
+
     Ok(serde_json::json!({
         "indexes": ["databasequery"],
         "limit": limit,
@@ -91,5 +95,33 @@ mod tests {
         assert_eq!(body["sorts"], serde_json::json!(["-timestamp"]));
         assert_eq!(body["time"]["from"], 1_700_000_000_000_i64);
         assert_eq!(body["time"]["to"], 1_700_000_060_000_i64);
+    }
+
+    #[test]
+    fn test_build_search_body_rejects_zero_limit() {
+        let err = build_search_body(
+            "service:db".into(),
+            1_700_000_000_000,
+            1_700_000_060_000,
+            0,
+            "desc",
+        )
+        .unwrap_err();
+
+        assert_eq!(err.to_string(), "--limit must be a positive integer");
+    }
+
+    #[test]
+    fn test_build_search_body_rejects_negative_limit() {
+        let err = build_search_body(
+            "service:db".into(),
+            1_700_000_000_000,
+            1_700_000_060_000,
+            -1,
+            "desc",
+        )
+        .unwrap_err();
+
+        assert_eq!(err.to_string(), "--limit must be a positive integer");
     }
 }

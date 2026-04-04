@@ -177,8 +177,7 @@ impl Config {
         self.access_token.is_some()
     }
 
-    /// Returns the API host (e.g., "api.datadoghq.com").
-    pub fn api_host(&self) -> String {
+    fn service_host(&self, subdomain: &str) -> String {
         #[cfg(not(feature = "browser"))]
         {
             if let Ok(mock) = std::env::var("PUP_MOCK_SERVER") {
@@ -191,50 +190,40 @@ impl Config {
         if self.site.contains("oncall") {
             self.site.clone()
         } else {
-            format!("api.{}", self.site)
+            format!("{subdomain}.{}", self.site)
         }
+    }
+
+    /// Returns the API host (e.g., "api.datadoghq.com").
+    pub fn api_host(&self) -> String {
+        self.service_host("api")
     }
 
     /// Returns the app host (e.g., "app.datadoghq.com").
     pub fn app_host(&self) -> String {
+        self.service_host("app")
+    }
+
+    fn service_base_url(&self, subdomain: &str) -> String {
         #[cfg(not(feature = "browser"))]
         {
             if let Ok(mock) = std::env::var("PUP_MOCK_SERVER") {
-                let host = mock
-                    .trim_start_matches("http://")
-                    .trim_start_matches("https://");
-                return host.to_string();
+                return mock;
             }
         }
-        if self.site.contains("oncall") {
-            self.site.clone()
-        } else {
-            format!("app.{}", self.site)
-        }
+        format!("https://{}", self.service_host(subdomain))
     }
 
     /// Returns the full API base URL (e.g., "https://api.datadoghq.com").
     /// Respects PUP_MOCK_SERVER for testing (native/WASI only).
     pub fn api_base_url(&self) -> String {
-        #[cfg(not(feature = "browser"))]
-        {
-            if let Ok(mock) = std::env::var("PUP_MOCK_SERVER") {
-                return mock;
-            }
-        }
-        format!("https://{}", self.api_host())
+        self.service_base_url("api")
     }
 
     /// Returns the full app base URL (e.g., "https://app.datadoghq.com").
     /// Respects PUP_MOCK_SERVER for testing (native/WASI only).
     pub fn app_base_url(&self) -> String {
-        #[cfg(not(feature = "browser"))]
-        {
-            if let Ok(mock) = std::env::var("PUP_MOCK_SERVER") {
-                return mock;
-            }
-        }
-        format!("https://{}", self.app_host())
+        self.service_base_url("app")
     }
 }
 
