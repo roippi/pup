@@ -670,8 +670,16 @@ pub async fn raw_post(
     body: serde_json::Value,
 ) -> anyhow::Result<serde_json::Value> {
     let url = format!("{}{}", cfg.api_base_url(), path);
+    raw_post_with_url(cfg, &url, body).await
+}
+
+async fn raw_post_with_url(
+    cfg: &Config,
+    url: &str,
+    body: serde_json::Value,
+) -> anyhow::Result<serde_json::Value> {
     let client = reqwest::Client::new();
-    let mut req = client.post(&url);
+    let mut req = client.post(url);
 
     if let Some(token) = &cfg.access_token {
         req = req.header("Authorization", format!("Bearer {token}"));
