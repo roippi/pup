@@ -200,6 +200,7 @@ impl Config {
     }
 
     /// Returns the app host (e.g., "app.datadoghq.com").
+    #[allow(dead_code)]
     pub fn app_host(&self) -> String {
         self.service_host("app")
     }
