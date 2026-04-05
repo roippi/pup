@@ -83,6 +83,38 @@ enum Commands {
         #[command(subcommand)]
         action: AcpActions,
     },
+    /// Schema and guide for the datadog-agent daemon and AI coding assistants
+    ///
+    /// This command group covers two distinct purposes:
+    ///
+    ///   schema  — Outputs a JSON schema of all pup commands for AI coding
+    ///             assistants (Claude, Copilot, etc.) to understand pup's API.
+    ///
+    ///   guide   — Displays an operational reference for the datadog-agent
+    ///             daemon (the Datadog host agent that collects metrics, traces,
+    ///             and logs). This is the `datadog-agent` binary, NOT an AI agent.
+    ///
+    /// In agent mode (auto-detected or via --agent / FORCE_AGENT_MODE=1),
+    /// --help returns structured JSON schema instead of human-readable text.
+    ///
+    /// COMMANDS:
+    ///   schema    Output the complete pup command schema as JSON (for AI assistants)
+    ///   guide     Display the datadog-agent (Datadog-Agent) operational reference
+    ///
+    /// EXAMPLES:
+    ///   # Get full JSON schema (all commands, flags, query syntax)
+    ///   pup agent schema
+    ///
+    ///   # Get compact schema (command names and flags only, fewer tokens)
+    ///   pup agent schema --compact
+    ///
+    ///   # Get the datadog-agent operational guide
+    ///   pup agent guide
+    #[command(name = "agent", verbatim_doc_comment)]
+    Agent {
+        #[command(subcommand)]
+        action: AgentActions,
+    },
     /// Manage Agentless Scanning configurations
     ///
     /// Manage cloud provider agentless scanning scan options and on-demand tasks.
@@ -116,38 +148,6 @@ enum Commands {
     AgentlessScanning {
         #[command(subcommand)]
         action: AgentlessScanningActions,
-    },
-    /// Schema and guide for the datadog-agent daemon and AI coding assistants
-    ///
-    /// This command group covers two distinct purposes:
-    ///
-    ///   schema  — Outputs a JSON schema of all pup commands for AI coding
-    ///             assistants (Claude, Copilot, etc.) to understand pup's API.
-    ///
-    ///   guide   — Displays an operational reference for the datadog-agent
-    ///             daemon (the Datadog host agent that collects metrics, traces,
-    ///             and logs). This is the `datadog-agent` binary, NOT an AI agent.
-    ///
-    /// In agent mode (auto-detected or via --agent / FORCE_AGENT_MODE=1),
-    /// --help returns structured JSON schema instead of human-readable text.
-    ///
-    /// COMMANDS:
-    ///   schema    Output the complete pup command schema as JSON (for AI assistants)
-    ///   guide     Display the datadog-agent (Datadog-Agent) operational reference
-    ///
-    /// EXAMPLES:
-    ///   # Get full JSON schema (all commands, flags, query syntax)
-    ///   pup agent schema
-    ///
-    ///   # Get compact schema (command names and flags only, fewer tokens)
-    ///   pup agent schema --compact
-    ///
-    ///   # Get the datadog-agent operational guide
-    ///   pup agent guide
-    #[command(name = "agent", verbatim_doc_comment)]
-    Agent {
-        #[command(subcommand)]
-        action: AgentActions,
     },
     /// Create shortcuts for pup commands
     ///
