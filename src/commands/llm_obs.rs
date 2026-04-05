@@ -1,22 +1,42 @@
 use anyhow::Result;
+use datadog_api_client::datadogV2::api_llm_observability::{
+    LLMObservabilityAPI, ListLLMObsDatasetsOptionalParams, ListLLMObsExperimentsOptionalParams,
+    ListLLMObsProjectsOptionalParams,
+};
+use datadog_api_client::datadogV2::model::{
+    LLMObsDatasetRequest, LLMObsDeleteExperimentsRequest, LLMObsExperimentRequest,
+    LLMObsExperimentUpdateRequest, LLMObsProjectRequest,
+};
 
 use crate::client;
 use crate::config::Config;
 use crate::formatter;
 use crate::util;
 
+fn make_api(cfg: &Config) -> LLMObservabilityAPI {
+    let dd_cfg = client::make_dd_config(cfg);
+    match client::make_bearer_client(cfg) {
+        Some(c) => LLMObservabilityAPI::with_client_and_config(dd_cfg, c),
+        None => LLMObservabilityAPI::with_config(dd_cfg),
+    }
+}
+
 // ---- Projects ----
 
 pub async fn projects_create(cfg: &Config, file: &str) -> Result<()> {
-    let body: serde_json::Value = util::read_json_file(file)?;
-    let resp = client::raw_post(cfg, "/api/v2/llm-obs/v1/projects", body)
+    let body: LLMObsProjectRequest = util::read_json_file(file)?;
+    let api = make_api(cfg);
+    let resp = api
+        .create_llm_obs_project(body)
         .await
         .map_err(|e| anyhow::anyhow!("failed to create LLM obs project: {e:?}"))?;
     formatter::output(cfg, &resp)
 }
 
 pub async fn projects_list(cfg: &Config) -> Result<()> {
-    let resp = client::raw_get(cfg, "/api/v2/llm-obs/v1/projects", &[])
+    let api = make_api(cfg);
+    let resp = api
+        .list_llm_obs_projects(ListLLMObsProjectsOptionalParams::default())
         .await
         .map_err(|e| anyhow::anyhow!("failed to list LLM obs projects: {e:?}"))?;
     formatter::output(cfg, &resp)
@@ -25,8 +45,10 @@ pub async fn projects_list(cfg: &Config) -> Result<()> {
 // ---- Experiments ----
 
 pub async fn experiments_create(cfg: &Config, file: &str) -> Result<()> {
-    let body: serde_json::Value = util::read_json_file(file)?;
-    let resp = client::raw_post(cfg, "/api/v2/llm-obs/v1/experiments", body)
+    let body: LLMObsExperimentRequest = util::read_json_file(file)?;
+    let api = make_api(cfg);
+    let resp = api
+        .create_llm_obs_experiment(body)
         .await
         .map_err(|e| anyhow::anyhow!("failed to create LLM obs experiment: {e:?}"))?;
     formatter::output(cfg, &resp)
@@ -37,36 +59,35 @@ pub async fn experiments_list(
     filter_project_id: Option<String>,
     filter_dataset_id: Option<String>,
 ) -> Result<()> {
-    let pid = filter_project_id.unwrap_or_default();
-    let did = filter_dataset_id.unwrap_or_default();
-    let mut query: Vec<(&str, &str)> = vec![];
-    if !pid.is_empty() {
-        query.push(("filter[project_id]", &pid));
+    let api = make_api(cfg);
+    let mut params = ListLLMObsExperimentsOptionalParams::default();
+    if let Some(pid) = filter_project_id {
+        params = params.filter_project_id(pid);
     }
-    if !did.is_empty() {
-        query.push(("filter[dataset_id]", &did));
+    if let Some(did) = filter_dataset_id {
+        params = params.filter_dataset_id(did);
     }
-    let resp = client::raw_get(cfg, "/api/v2/llm-obs/v1/experiments", &query)
+    let resp = api
+        .list_llm_obs_experiments(params)
         .await
         .map_err(|e| anyhow::anyhow!("failed to list LLM obs experiments: {e:?}"))?;
     formatter::output(cfg, &resp)
 }
 
 pub async fn experiments_update(cfg: &Config, experiment_id: &str, file: &str) -> Result<()> {
-    let body: serde_json::Value = util::read_json_file(file)?;
-    let resp = client::raw_patch(
-        cfg,
-        &format!("/api/v2/llm-obs/v1/experiments/{experiment_id}"),
-        body,
-    )
-    .await
-    .map_err(|e| anyhow::anyhow!("failed to update LLM obs experiment: {e:?}"))?;
+    let body: LLMObsExperimentUpdateRequest = util::read_json_file(file)?;
+    let api = make_api(cfg);
+    let resp = api
+        .update_llm_obs_experiment(experiment_id.to_string(), body)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to update LLM obs experiment: {e:?}"))?;
     formatter::output(cfg, &resp)
 }
 
 pub async fn experiments_delete(cfg: &Config, file: &str) -> Result<()> {
-    let body: serde_json::Value = util::read_json_file(file)?;
-    client::raw_post(cfg, "/api/v2/llm-obs/v1/experiments/delete", body)
+    let body: LLMObsDeleteExperimentsRequest = util::read_json_file(file)?;
+    let api = make_api(cfg);
+    api.delete_llm_obs_experiments(body)
         .await
         .map_err(|e| anyhow::anyhow!("failed to delete LLM obs experiments: {e:?}"))?;
     eprintln!("LLM obs experiments deleted.");
@@ -76,29 +97,28 @@ pub async fn experiments_delete(cfg: &Config, file: &str) -> Result<()> {
 // ---- Datasets ----
 
 pub async fn datasets_create(cfg: &Config, project_id: &str, file: &str) -> Result<()> {
-    let body: serde_json::Value = util::read_json_file(file)?;
-    let resp = client::raw_post(
-        cfg,
-        &format!("/api/v2/llm-obs/v1/{project_id}/datasets"),
-        body,
-    )
-    .await
-    .map_err(|e| anyhow::anyhow!("failed to create LLM obs dataset: {e:?}"))?;
+    let body: LLMObsDatasetRequest = util::read_json_file(file)?;
+    let api = make_api(cfg);
+    let resp = api
+        .create_llm_obs_dataset(project_id.to_string(), body)
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to create LLM obs dataset: {e:?}"))?;
     formatter::output(cfg, &resp)
 }
 
 pub async fn datasets_list(cfg: &Config, project_id: &str) -> Result<()> {
-    let resp = client::raw_get(
-        cfg,
-        &format!("/api/v2/llm-obs/v1/{project_id}/datasets"),
-        &[],
-    )
-    .await
-    .map_err(|e| anyhow::anyhow!("failed to list LLM obs datasets: {e:?}"))?;
+    let api = make_api(cfg);
+    let resp = api
+        .list_llm_obs_datasets(
+            project_id.to_string(),
+            ListLLMObsDatasetsOptionalParams::default(),
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!("failed to list LLM obs datasets: {e:?}"))?;
     formatter::output(cfg, &resp)
 }
 
-// ---- Experiment analytics ----
+// ---- Experiment analytics (no typed equivalent — unstable MCP endpoints) ----
 
 pub async fn experiments_summary(cfg: &Config, experiment_id: &str) -> Result<()> {
     let body = serde_json::json!({ "experiment_id": experiment_id });
@@ -198,7 +218,7 @@ pub async fn experiments_dimension_values(
     formatter::output(cfg, &resp)
 }
 
-// ---- Spans ----
+// ---- Spans (no typed equivalent — unstable MCP endpoint) ----
 
 #[allow(clippy::too_many_arguments)]
 pub async fn spans_search(
