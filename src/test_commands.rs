@@ -3719,6 +3719,218 @@ fn test_symdb_view_display() {
 }
 
 // -------------------------------------------------------------------------
+// Software Catalog
+// -------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_software_catalog_entities_list() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(&mut server, "GET", r#"{"data":[]}"#).await;
+    let result = crate::commands::software_catalog::entities_list(&cfg).await;
+    assert!(
+        result.is_ok(),
+        "software catalog entities list failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_software_catalog_kinds_list() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(&mut server, "GET", r#"{"data":[]}"#).await;
+    let result = crate::commands::software_catalog::kinds_list(&cfg).await;
+    assert!(
+        result.is_ok(),
+        "software catalog kinds list failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_software_catalog_relations_list() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(&mut server, "GET", r#"{"data":[]}"#).await;
+    let result = crate::commands::software_catalog::relations_list(&cfg).await;
+    assert!(
+        result.is_ok(),
+        "software catalog relations list failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_software_catalog_entities_list_error() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = server
+        .mock("GET", mockito::Matcher::Any)
+        .match_query(mockito::Matcher::Any)
+        .with_status(500)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"errors":["Internal Server Error"]}"#)
+        .create_async()
+        .await;
+    let result = crate::commands::software_catalog::entities_list(&cfg).await;
+    assert!(
+        result.is_err(),
+        "expected software catalog entities list to fail on 500"
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+// -------------------------------------------------------------------------
+// Incident Teams
+// -------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_incident_teams_list() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(&mut server, "GET", r#"{"data":[],"meta":{}}"#).await;
+    let result = crate::commands::incidents::teams_list(&cfg).await;
+    assert!(
+        result.is_ok(),
+        "incident teams list failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_incident_teams_list_error() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = server
+        .mock("GET", mockito::Matcher::Any)
+        .match_query(mockito::Matcher::Any)
+        .with_status(403)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"errors":["Forbidden"]}"#)
+        .create_async()
+        .await;
+    let result = crate::commands::incidents::teams_list(&cfg).await;
+    assert!(result.is_err(), "incident teams list should fail on 403");
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+// -------------------------------------------------------------------------
+// Incident Services
+// -------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_incident_services_list() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(&mut server, "GET", r#"{"data":[],"meta":{}}"#).await;
+    let result = crate::commands::incidents::services_list(&cfg).await;
+    assert!(
+        result.is_ok(),
+        "incident services list failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_incident_services_list_error() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = server
+        .mock("GET", mockito::Matcher::Any)
+        .match_query(mockito::Matcher::Any)
+        .with_status(403)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"errors":["Forbidden"]}"#)
+        .create_async()
+        .await;
+    let result = crate::commands::incidents::services_list(&cfg).await;
+    assert!(result.is_err(), "incident services list should fail on 403");
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+// -------------------------------------------------------------------------
+// MS Teams
+// -------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_ms_teams_handles_list() {
+    let _lock = lock_env();
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(&mut server, "GET", r#"{"data":[],"meta":{}}"#).await;
+    let result = crate::commands::ms_teams::handles_list(&cfg).await;
+    assert!(
+        result.is_ok(),
+        "ms teams handles list failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+}
+
+#[tokio::test]
+async fn test_ms_teams_handles_list_error() {
+    let _lock = lock_env();
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = server
+        .mock("GET", mockito::Matcher::Any)
+        .match_query(mockito::Matcher::Any)
+        .with_status(403)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"errors":["Forbidden"]}"#)
+        .create_async()
+        .await;
+    let result = crate::commands::ms_teams::handles_list(&cfg).await;
+    assert!(result.is_err(), "ms teams handles list should fail on 403");
+    cleanup_env();
+}
+
+#[tokio::test]
+async fn test_ms_teams_workflows_list() {
+    let _lock = lock_env();
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(&mut server, "GET", r#"{"data":[],"meta":{}}"#).await;
+    let result = crate::commands::ms_teams::workflows_list(&cfg).await;
+    assert!(
+        result.is_ok(),
+        "ms teams workflows list failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+}
+
+// -------------------------------------------------------------------------
 // CSM Threats
 // -------------------------------------------------------------------------
 
@@ -3778,7 +3990,6 @@ async fn test_csm_threats_agent_rules_list_with_policy() {
 async fn test_csm_threats_agent_policies_list_error() {
     let _lock = lock_env();
     std::env::set_var("DD_TOKEN_STORAGE", "file");
-    // Use a server that returns 403
     let mut server = mockito::Server::new_async().await;
     let cfg = test_config(&server.url());
     let _mock = server
