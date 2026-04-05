@@ -474,6 +474,32 @@ enum Commands {
         #[command(subcommand)]
         action: AuthActions,
     },
+    /// Manage AuthN mappings for federated identity providers
+    ///
+    /// Manage AuthN Mappings to automatically map groups of users to roles
+    /// in Datadog using attributes sent from Identity Providers.
+    ///
+    /// COMMANDS:
+    ///   list    List all AuthN mappings
+    ///   get     Get an AuthN mapping
+    ///   create  Create an AuthN mapping from JSON
+    ///   update  Update an AuthN mapping
+    ///   delete  Delete an AuthN mapping
+    ///
+    /// EXAMPLES:
+    ///   pup authn-mappings list
+    ///   pup authn-mappings get <mapping-id>
+    ///   pup authn-mappings create --file mapping.json
+    ///   pup authn-mappings update <mapping-id> --file mapping.json
+    ///   pup authn-mappings delete <mapping-id>
+    ///
+    /// AUTHENTICATION:
+    ///   Requires either OAuth2 authentication or API keys.
+    #[command(name = "authn-mappings", verbatim_doc_comment)]
+    AuthnMappings {
+        #[command(subcommand)]
+        action: AuthnMappingsActions,
+    },
     /// Ask Datadog Bits AI a question in natural language
     ///
     /// Query your Datadog environment using plain English.
@@ -3696,6 +3722,80 @@ enum SecurityActions {
         #[command(subcommand)]
         action: SecuritySuppressionActions,
     },
+    /// Manage ASM WAF custom rules
+    #[command(name = "asm-custom-rules")]
+    AsmCustomRules {
+        #[command(subcommand)]
+        action: AsmCustomRuleActions,
+    },
+    /// Manage ASM WAF exclusion filters
+    #[command(name = "asm-exclusions")]
+    AsmExclusions {
+        #[command(subcommand)]
+        action: AsmExclusionActions,
+    },
+    /// Manage restriction policies
+    #[command(name = "restriction-policies")]
+    RestrictionPolicies {
+        #[command(subcommand)]
+        action: RestrictionPolicyActions,
+    },
+}
+
+#[derive(Subcommand)]
+enum AsmCustomRuleActions {
+    /// List WAF custom rules
+    List,
+    /// Get a WAF custom rule
+    Get { custom_rule_id: String },
+    /// Create a WAF custom rule
+    Create {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Update a WAF custom rule
+    Update {
+        custom_rule_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Delete a WAF custom rule
+    Delete { custom_rule_id: String },
+}
+
+#[derive(Subcommand)]
+enum AsmExclusionActions {
+    /// List WAF exclusion filters
+    List,
+    /// Get a WAF exclusion filter
+    Get { exclusion_filter_id: String },
+    /// Create a WAF exclusion filter
+    Create {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Update a WAF exclusion filter
+    Update {
+        exclusion_filter_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Delete a WAF exclusion filter
+    Delete { exclusion_filter_id: String },
+}
+
+#[derive(Subcommand)]
+enum RestrictionPolicyActions {
+    /// Get a restriction policy for a resource
+    Get { resource_id: String },
+    /// Update (replace) the restriction policy for a resource
+    Update {
+        resource_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Delete the restriction policy for a resource
+    Delete { resource_id: String },
 }
 
 #[derive(Subcommand)]
@@ -3797,6 +3897,28 @@ enum SecuritySuppressionActions {
         #[arg(long, help = "JSON file with request body (required)")]
         file: String,
     },
+}
+
+// ---- AuthN Mappings ----
+#[derive(Subcommand)]
+enum AuthnMappingsActions {
+    /// List all AuthN mappings
+    List,
+    /// Get an AuthN mapping
+    Get { mapping_id: String },
+    /// Create an AuthN mapping from JSON
+    Create {
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Update an AuthN mapping
+    Update {
+        mapping_id: String,
+        #[arg(long, help = "JSON file with request body (required)")]
+        file: String,
+    },
+    /// Delete an AuthN mapping
+    Delete { mapping_id: String },
 }
 
 // ---- Seats ----
@@ -8323,6 +8445,90 @@ async fn main_inner() -> anyhow::Result<()> {
                         commands::security::suppressions_validate(&cfg, &file).await?;
                     }
                 },
+                SecurityActions::AsmCustomRules { action } => match action {
+                    AsmCustomRuleActions::List => {
+                        commands::security::asm_custom_rules_list(&cfg).await?;
+                    }
+                    AsmCustomRuleActions::Get { custom_rule_id } => {
+                        commands::security::asm_custom_rules_get(&cfg, &custom_rule_id).await?;
+                    }
+                    AsmCustomRuleActions::Create { file } => {
+                        commands::security::asm_custom_rules_create(&cfg, &file).await?;
+                    }
+                    AsmCustomRuleActions::Update {
+                        custom_rule_id,
+                        file,
+                    } => {
+                        commands::security::asm_custom_rules_update(&cfg, &custom_rule_id, &file)
+                            .await?;
+                    }
+                    AsmCustomRuleActions::Delete { custom_rule_id } => {
+                        commands::security::asm_custom_rules_delete(&cfg, &custom_rule_id).await?;
+                    }
+                },
+                SecurityActions::AsmExclusions { action } => match action {
+                    AsmExclusionActions::List => {
+                        commands::security::asm_exclusions_list(&cfg).await?;
+                    }
+                    AsmExclusionActions::Get {
+                        exclusion_filter_id,
+                    } => {
+                        commands::security::asm_exclusions_get(&cfg, &exclusion_filter_id).await?;
+                    }
+                    AsmExclusionActions::Create { file } => {
+                        commands::security::asm_exclusions_create(&cfg, &file).await?;
+                    }
+                    AsmExclusionActions::Update {
+                        exclusion_filter_id,
+                        file,
+                    } => {
+                        commands::security::asm_exclusions_update(
+                            &cfg,
+                            &exclusion_filter_id,
+                            &file,
+                        )
+                        .await?;
+                    }
+                    AsmExclusionActions::Delete {
+                        exclusion_filter_id,
+                    } => {
+                        commands::security::asm_exclusions_delete(&cfg, &exclusion_filter_id)
+                            .await?;
+                    }
+                },
+                SecurityActions::RestrictionPolicies { action } => match action {
+                    RestrictionPolicyActions::Get { resource_id } => {
+                        commands::security::restriction_policy_get(&cfg, &resource_id).await?;
+                    }
+                    RestrictionPolicyActions::Update { resource_id, file } => {
+                        commands::security::restriction_policy_update(&cfg, &resource_id, &file)
+                            .await?;
+                    }
+                    RestrictionPolicyActions::Delete { resource_id } => {
+                        commands::security::restriction_policy_delete(&cfg, &resource_id).await?;
+                    }
+                },
+            }
+        }
+        // --- AuthN Mappings ---
+        Commands::AuthnMappings { action } => {
+            cfg.validate_auth()?;
+            match action {
+                AuthnMappingsActions::List => {
+                    commands::authn_mappings::list(&cfg).await?;
+                }
+                AuthnMappingsActions::Get { mapping_id } => {
+                    commands::authn_mappings::get(&cfg, &mapping_id).await?;
+                }
+                AuthnMappingsActions::Create { file } => {
+                    commands::authn_mappings::create(&cfg, &file).await?;
+                }
+                AuthnMappingsActions::Update { mapping_id, file } => {
+                    commands::authn_mappings::update(&cfg, &mapping_id, &file).await?;
+                }
+                AuthnMappingsActions::Delete { mapping_id } => {
+                    commands::authn_mappings::delete(&cfg, &mapping_id).await?;
+                }
             }
         }
         // --- Organizations ---
