@@ -136,7 +136,7 @@ pub fn make_bearer_client(cfg: &Config) -> Option<ClientWithMiddleware> {
 // Unstable operations table — used by make_dd_config
 // ---------------------------------------------------------------------------
 
-/// All 85 unstable operations (snake_case for the Rust DD client).
+/// All 93 unstable operations (snake_case for the Rust DD client).
 static UNSTABLE_OPS: &[&str] = &[
     // Incidents (16)
     "v2.list_incidents",
@@ -240,6 +240,16 @@ static UNSTABLE_OPS: &[&str] = &[
     "v2.delete_llm_obs_experiments",
     "v2.create_llm_obs_dataset",
     "v2.list_llm_obs_datasets",
+    // Datasets (5)
+    "v2.create_dataset",
+    "v2.delete_dataset",
+    "v2.get_all_datasets",
+    "v2.get_dataset",
+    "v2.update_dataset",
+    // Data Deletion (3)
+    "v2.cancel_data_deletion_request",
+    "v2.create_data_deletion_request",
+    "v2.get_data_deletion_requests",
 ];
 
 // ---------------------------------------------------------------------------
@@ -875,7 +885,7 @@ mod tests {
 
     #[test]
     fn test_unstable_ops_count() {
-        assert_eq!(UNSTABLE_OPS.len(), 85);
+        assert_eq!(UNSTABLE_OPS.len(), 93);
     }
 
     #[test]
