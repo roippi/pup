@@ -3717,3 +3717,140 @@ fn test_symdb_view_display() {
         "probe-locations"
     );
 }
+
+// -------------------------------------------------------------------------
+// Processes
+// -------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_processes_list() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(
+        &mut server,
+        "GET",
+        r#"{"data":[],"meta":{"page":{"after":""}}}"#,
+    )
+    .await;
+    let result = crate::commands::processes::list(&cfg, None, None, None).await;
+    assert!(result.is_ok(), "processes list failed: {:?}", result.err());
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_processes_list_with_search() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(
+        &mut server,
+        "GET",
+        r#"{"data":[],"meta":{"page":{"after":""}}}"#,
+    )
+    .await;
+    let result = crate::commands::processes::list(&cfg, Some("nginx".into()), None, Some(10)).await;
+    assert!(
+        result.is_ok(),
+        "processes list with search failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+// -------------------------------------------------------------------------
+// Logs Restriction Queries
+// -------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_logs_restriction_list() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(
+        &mut server,
+        "GET",
+        r#"{"data":[],"meta":{"page":{"total_count":0}}}"#,
+    )
+    .await;
+    let result = crate::commands::logs_restriction::list(&cfg).await;
+    assert!(
+        result.is_ok(),
+        "logs_restriction list failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_logs_restriction_delete_missing_id() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = server
+        .mock("DELETE", mockito::Matcher::Any)
+        .with_status(404)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"errors":["Not Found"]}"#)
+        .create_async()
+        .await;
+    let result = crate::commands::logs_restriction::delete(&cfg, "nonexistent-id").await;
+    assert!(
+        result.is_err(),
+        "expected error for missing restriction query"
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+// -------------------------------------------------------------------------
+// Service Accounts
+// -------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_service_account_app_keys_list() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(&mut server, "GET", r#"{"data":[],"meta":{}}"#).await;
+    let result = crate::commands::users::service_account_app_keys_list(&cfg, "sa-test-id").await;
+    assert!(
+        result.is_ok(),
+        "service account app keys list failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_service_account_app_keys_delete_missing() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = server
+        .mock("DELETE", mockito::Matcher::Any)
+        .with_status(404)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"errors":["Not Found"]}"#)
+        .create_async()
+        .await;
+    let result = crate::commands::users::service_account_app_keys_delete(
+        &cfg,
+        "sa-test-id",
+        "key-not-found",
+    )
+    .await;
+    assert!(result.is_err(), "expected error for missing app key delete");
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
