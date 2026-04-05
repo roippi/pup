@@ -4309,3 +4309,171 @@ async fn test_agentless_scanning_aws_scan_options_list_error() {
     cleanup_env();
     std::env::remove_var("DD_TOKEN_STORAGE");
 }
+
+// -------------------------------------------------------------------------
+// AuthN Mappings
+// -------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_authn_mappings_list() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(&mut server, "GET", r#"{"data":[]}"#).await;
+    let result = crate::commands::authn_mappings::list(&cfg).await;
+    assert!(
+        result.is_ok(),
+        "authn mappings list failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_authn_mappings_list_error() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = server
+        .mock("GET", mockito::Matcher::Any)
+        .with_status(403)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"errors":["Forbidden"]}"#)
+        .create_async()
+        .await;
+    let result = crate::commands::authn_mappings::list(&cfg).await;
+    assert!(result.is_err(), "expected error for 403 response");
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_authn_mappings_get() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(
+        &mut server,
+        "GET",
+        r#"{"data":{"type":"authn_mappings","id":"abc-123","attributes":{}}}"#,
+    )
+    .await;
+    let result = crate::commands::authn_mappings::get(&cfg, "abc-123").await;
+    assert!(
+        result.is_ok(),
+        "authn mappings get failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+// -------------------------------------------------------------------------
+// ASM WAF Custom Rules
+// -------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_asm_custom_rules_list() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(&mut server, "GET", r#"{"data":[]}"#).await;
+    let result = crate::commands::security::asm_custom_rules_list(&cfg).await;
+    assert!(
+        result.is_ok(),
+        "ASM custom rules list failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_asm_custom_rules_list_error() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = server
+        .mock("GET", mockito::Matcher::Any)
+        .with_status(403)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"errors":["Forbidden"]}"#)
+        .create_async()
+        .await;
+    let result = crate::commands::security::asm_custom_rules_list(&cfg).await;
+    assert!(result.is_err(), "expected error for 403 response");
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+// -------------------------------------------------------------------------
+// ASM WAF Exclusion Filters
+// -------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_asm_exclusions_list() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(&mut server, "GET", r#"{"data":[]}"#).await;
+    let result = crate::commands::security::asm_exclusions_list(&cfg).await;
+    assert!(
+        result.is_ok(),
+        "ASM exclusions list failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+// -------------------------------------------------------------------------
+// Restriction Policies
+// -------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_restriction_policy_get() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(
+        &mut server,
+        "GET",
+        r#"{"data":{"type":"restriction_policy","id":"dashboard:abc-123","attributes":{"bindings":[]}}}"#,
+    )
+    .await;
+    let result = crate::commands::security::restriction_policy_get(&cfg, "dashboard:abc-123").await;
+    assert!(
+        result.is_ok(),
+        "restriction policy get failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_restriction_policy_get_error() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = server
+        .mock("GET", mockito::Matcher::Any)
+        .with_status(404)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"errors":["Not Found"]}"#)
+        .create_async()
+        .await;
+    let result = crate::commands::security::restriction_policy_get(&cfg, "dashboard:missing").await;
+    assert!(result.is_err(), "expected error for 404 response");
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
