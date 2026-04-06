@@ -153,6 +153,5 @@ pub async fn service_account_app_keys_delete(
     )
     .await
     .map_err(|e| anyhow::anyhow!("failed to delete service account application key: {e:?}"))?;
-    println!("Application key '{app_key_id}' deleted from service account '{service_account_id}'.");
     Ok(())
 }

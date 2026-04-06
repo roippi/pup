@@ -4614,3 +4614,119 @@ async fn test_service_account_app_keys_delete_missing() {
     cleanup_env();
     std::env::remove_var("DD_TOKEN_STORAGE");
 }
+
+#[tokio::test]
+async fn test_service_accounts_create() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(
+        &mut server,
+        "POST",
+        r#"{"data":{"type":"users","id":"sa-new","attributes":{}}}"#,
+    )
+    .await;
+    // file doesn't exist — expect an error on the read_json_file path
+    let result = crate::commands::users::service_accounts_create(&cfg, "/tmp/test.json").await;
+    assert!(result.is_err(), "expected error for missing input file");
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_service_account_app_keys_get() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = mock_any(
+        &mut server,
+        "GET",
+        r#"{"data":{"type":"api_keys","id":"key-1","attributes":{}}}"#,
+    )
+    .await;
+    let result =
+        crate::commands::users::service_account_app_keys_get(&cfg, "sa-id", "key-1").await;
+    assert!(
+        result.is_ok(),
+        "service account app key get failed: {:?}",
+        result.err()
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_service_account_app_keys_get_error() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = server
+        .mock("GET", mockito::Matcher::Any)
+        .with_status(404)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"errors":["Not Found"]}"#)
+        .create_async()
+        .await;
+    let result =
+        crate::commands::users::service_account_app_keys_get(&cfg, "sa-id", "key-missing").await;
+    assert!(result.is_err(), "expected error for missing app key get");
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_service_account_app_keys_create() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = server
+        .mock("POST", mockito::Matcher::Any)
+        .with_status(403)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"errors":["Forbidden"]}"#)
+        .create_async()
+        .await;
+    // file doesn't exist — expect error on read_json_file before even hitting the mock
+    let result =
+        crate::commands::users::service_account_app_keys_create(&cfg, "sa-id", "/tmp/test.json")
+            .await;
+    assert!(
+        result.is_err(),
+        "expected error for service account app key create"
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_service_account_app_keys_update() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let _mock = server
+        .mock("PATCH", mockito::Matcher::Any)
+        .with_status(403)
+        .with_header("content-type", "application/json")
+        .with_body(r#"{"errors":["Forbidden"]}"#)
+        .create_async()
+        .await;
+    // file doesn't exist — expect error on read_json_file before even hitting the mock
+    let result = crate::commands::users::service_account_app_keys_update(
+        &cfg,
+        "sa-id",
+        "key-1",
+        "/tmp/test.json",
+    )
+    .await;
+    assert!(
+        result.is_err(),
+        "expected error for service account app key update"
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
