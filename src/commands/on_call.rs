@@ -370,7 +370,6 @@ pub async fn notification_channels_delete(
     api.delete_user_notification_channel(user_id.to_string(), channel_id.to_string())
         .await
         .map_err(|e| anyhow::anyhow!("failed to delete notification channel: {e:?}"))?;
-    println!("Notification channel '{channel_id}' for user '{user_id}' deleted successfully.");
     Ok(())
 }
 
@@ -456,7 +455,6 @@ pub async fn notification_rules_delete(cfg: &Config, user_id: &str, rule_id: &st
     api.delete_user_notification_rule(user_id.to_string(), rule_id.to_string())
         .await
         .map_err(|e| anyhow::anyhow!("failed to delete notification rule: {e:?}"))?;
-    println!("Notification rule '{rule_id}' for user '{user_id}' deleted successfully.");
     Ok(())
 }
 
