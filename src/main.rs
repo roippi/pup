@@ -1522,6 +1522,12 @@ enum Commands {
     ///   # List restriction queries
     ///   pup logs restriction-queries list
     ///
+    ///   # Manage role-based log restrictions
+    ///   pup logs restrictions list
+    ///   pup logs restrictions get <query-id>
+    ///   pup logs restrictions create --file query.json
+    ///   pup logs restrictions roles list <query-id>
+    ///
     /// AUTHENTICATION:
     ///   Requires either OAuth2 authentication (pup auth login) or API keys
     ///   (DD_API_KEY and DD_APP_KEY environment variables).
@@ -1529,33 +1535,6 @@ enum Commands {
     Logs {
         #[command(subcommand)]
         action: LogActions,
-    },
-    /// Manage log restriction queries for role-based access control
-    ///
-    /// Restriction queries limit which log data users can read based on their roles.
-    /// Use this command to manage the full lifecycle of restriction queries.
-    ///
-    /// CAPABILITIES:
-    ///   • List all restriction queries
-    ///   • Get a specific restriction query
-    ///   • Create, update, and delete restriction queries
-    ///   • List and add roles to restriction queries
-    ///
-    /// EXAMPLES:
-    ///   pup logs-restriction list
-    ///   pup logs-restriction get <query-id>
-    ///   pup logs-restriction create --file query.json
-    ///   pup logs-restriction update <query-id> --file query.json
-    ///   pup logs-restriction delete <query-id>
-    ///   pup logs-restriction roles list <query-id>
-    ///   pup logs-restriction roles add <query-id> --file role.json
-    ///
-    /// AUTHENTICATION:
-    ///   Requires either OAuth2 authentication or API keys.
-    #[command(name = "logs-restriction", verbatim_doc_comment)]
-    LogsRestriction {
-        #[command(subcommand)]
-        action: LogsRestrictionActions,
     },
     /// Query and manage metrics
     ///
@@ -2767,6 +2746,11 @@ enum LogActions {
     RestrictionQueries {
         #[command(subcommand)]
         action: LogRestrictionQueryActions,
+    },
+    /// Manage log restriction queries for role-based access control
+    Restrictions {
+        #[command(subcommand)]
+        action: LogsRestrictionActions,
     },
 }
 
@@ -8493,6 +8477,31 @@ async fn main_inner() -> anyhow::Result<()> {
                         commands::logs::restriction_queries_get(&cfg, &query_id).await?;
                     }
                 },
+                LogActions::Restrictions { action } => match action {
+                    LogsRestrictionActions::List => {
+                        commands::logs_restriction::list(&cfg).await?;
+                    }
+                    LogsRestrictionActions::Get { query_id } => {
+                        commands::logs_restriction::get(&cfg, &query_id).await?;
+                    }
+                    LogsRestrictionActions::Create { file } => {
+                        commands::logs_restriction::create(&cfg, &file).await?;
+                    }
+                    LogsRestrictionActions::Update { query_id, file } => {
+                        commands::logs_restriction::update(&cfg, &query_id, &file).await?;
+                    }
+                    LogsRestrictionActions::Delete { query_id } => {
+                        commands::logs_restriction::delete(&cfg, &query_id).await?;
+                    }
+                    LogsRestrictionActions::Roles { action } => match action {
+                        LogsRestrictionRoleActions::List { query_id } => {
+                            commands::logs_restriction::roles_list(&cfg, &query_id).await?;
+                        }
+                        LogsRestrictionRoleActions::Add { query_id, file } => {
+                            commands::logs_restriction::roles_add(&cfg, &query_id, &file).await?;
+                        }
+                    },
+                },
             }
         }
         // --- Incidents ---
@@ -11385,35 +11394,6 @@ async fn main_inner() -> anyhow::Result<()> {
                 } => {
                     commands::processes::list(&cfg, search, tags, page_limit).await?;
                 }
-            }
-        }
-        // --- LogsRestriction ---
-        Commands::LogsRestriction { action } => {
-            cfg.validate_auth()?;
-            match action {
-                LogsRestrictionActions::List => {
-                    commands::logs_restriction::list(&cfg).await?;
-                }
-                LogsRestrictionActions::Get { query_id } => {
-                    commands::logs_restriction::get(&cfg, &query_id).await?;
-                }
-                LogsRestrictionActions::Create { file } => {
-                    commands::logs_restriction::create(&cfg, &file).await?;
-                }
-                LogsRestrictionActions::Update { query_id, file } => {
-                    commands::logs_restriction::update(&cfg, &query_id, &file).await?;
-                }
-                LogsRestrictionActions::Delete { query_id } => {
-                    commands::logs_restriction::delete(&cfg, &query_id).await?;
-                }
-                LogsRestrictionActions::Roles { action } => match action {
-                    LogsRestrictionRoleActions::List { query_id } => {
-                        commands::logs_restriction::roles_list(&cfg, &query_id).await?;
-                    }
-                    LogsRestrictionRoleActions::Add { query_id, file } => {
-                        commands::logs_restriction::roles_add(&cfg, &query_id, &file).await?;
-                    }
-                },
             }
         }
         // --- Agentless Scanning ---

@@ -4494,10 +4494,27 @@ async fn test_processes_list() {
         r#"{"data":[],"meta":{"page":{"after":""}}}"#,
     )
     .await;
-    let result = crate::commands::processes::list(&cfg, None, None, None).await;
+    let result =
+        crate::commands::processes::list(&cfg, Some("nginx".to_string()), None, None).await;
     assert!(result.is_ok(), "processes list failed: {:?}", result.err());
     cleanup_env();
     std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+#[tokio::test]
+async fn test_processes_list_requires_filter() {
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    let result = crate::commands::processes::list(&cfg, None, None, None).await;
+    assert!(
+        result.is_err(),
+        "processes list without filter should fail"
+    );
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+    drop(server);
 }
 
 #[tokio::test]

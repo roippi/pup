@@ -11,6 +11,9 @@ pub async fn list(
     tags: Option<String>,
     page_limit: Option<i32>,
 ) -> Result<()> {
+    if search.is_none() && tags.is_none() {
+        anyhow::bail!("at least one of --search or --tags is required");
+    }
     let dd_cfg = client::make_dd_config(cfg);
     let api = match client::make_bearer_client(cfg) {
         Some(c) => ProcessesAPI::with_client_and_config(dd_cfg, c),
