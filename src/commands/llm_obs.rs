@@ -1,8 +1,5 @@
 use anyhow::Result;
-use datadog_api_client::datadogV2::api_llm_observability::{
-    LLMObservabilityAPI, ListLLMObsDatasetsOptionalParams, ListLLMObsExperimentsOptionalParams,
-    ListLLMObsProjectsOptionalParams,
-};
+use datadog_api_client::datadogV2::api_llm_observability::LLMObservabilityAPI;
 use datadog_api_client::datadogV2::model::{
     LLMObsDatasetRequest, LLMObsDeleteExperimentsRequest, LLMObsExperimentRequest,
     LLMObsExperimentUpdateRequest, LLMObsProjectRequest,
@@ -34,9 +31,7 @@ pub async fn projects_create(cfg: &Config, file: &str) -> Result<()> {
 }
 
 pub async fn projects_list(cfg: &Config) -> Result<()> {
-    let api = make_api(cfg);
-    let resp = api
-        .list_llm_obs_projects(ListLLMObsProjectsOptionalParams::default())
+    let resp = client::raw_get(cfg, "/api/v2/llm-obs/v1/projects", &[])
         .await
         .map_err(|e| anyhow::anyhow!("failed to list LLM obs projects: {e:?}"))?;
     formatter::output(cfg, &resp)
@@ -59,16 +54,15 @@ pub async fn experiments_list(
     filter_project_id: Option<String>,
     filter_dataset_id: Option<String>,
 ) -> Result<()> {
-    let api = make_api(cfg);
-    let mut params = ListLLMObsExperimentsOptionalParams::default();
-    if let Some(pid) = filter_project_id {
-        params = params.filter_project_id(pid);
+    let mut query: Vec<(&str, String)> = Vec::new();
+    if let Some(ref pid) = filter_project_id {
+        query.push(("filter[project_id]", pid.clone()));
     }
-    if let Some(did) = filter_dataset_id {
-        params = params.filter_dataset_id(did);
+    if let Some(ref did) = filter_dataset_id {
+        query.push(("filter[dataset_id]", did.clone()));
     }
-    let resp = api
-        .list_llm_obs_experiments(params)
+    let query_refs: Vec<(&str, &str)> = query.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    let resp = client::raw_get(cfg, "/api/v2/llm-obs/v1/experiments", &query_refs)
         .await
         .map_err(|e| anyhow::anyhow!("failed to list LLM obs experiments: {e:?}"))?;
     formatter::output(cfg, &resp)
@@ -107,12 +101,8 @@ pub async fn datasets_create(cfg: &Config, project_id: &str, file: &str) -> Resu
 }
 
 pub async fn datasets_list(cfg: &Config, project_id: &str) -> Result<()> {
-    let api = make_api(cfg);
-    let resp = api
-        .list_llm_obs_datasets(
-            project_id.to_string(),
-            ListLLMObsDatasetsOptionalParams::default(),
-        )
+    let path = format!("/api/v2/llm-obs/v1/projects/{project_id}/datasets");
+    let resp = client::raw_get(cfg, &path, &[])
         .await
         .map_err(|e| anyhow::anyhow!("failed to list LLM obs datasets: {e:?}"))?;
     formatter::output(cfg, &resp)

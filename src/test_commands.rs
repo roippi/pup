@@ -2492,7 +2492,7 @@ async fn test_llm_obs_projects_list() {
     let mut server = mockito::Server::new_async().await;
     let cfg = test_config(&server.url());
 
-    // Full response body satisfying the typed LLMObsProjectDataAttributesResponse schema.
+    // Raw HTTP path: response can have any shape; missing nullable fields are tolerated.
     let body = r#"{"data":[{"id":"proj-1","type":"projects","attributes":{"name":"my-project","description":null,"created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z"}}]}"#;
     let _mock = mock_any(&mut server, "GET", body).await;
 
@@ -2540,6 +2540,32 @@ async fn test_llm_obs_projects_list_no_auth() {
     };
     let result = crate::commands::llm_obs::projects_list(&cfg).await;
     assert!(result.is_err(), "should fail without auth");
+    cleanup_env();
+    std::env::remove_var("DD_TOKEN_STORAGE");
+}
+
+// --- projects list schema tolerance ---
+
+#[tokio::test]
+async fn test_llm_obs_projects_list_missing_nullable_fields() {
+    // raw HTTP should succeed even with minimal response missing optional/nullable fields
+    let _lock = lock_env();
+    std::env::set_var("DD_TOKEN_STORAGE", "file");
+    let mut server = mockito::Server::new_async().await;
+    let cfg = test_config(&server.url());
+    // response missing description/config/metadata fields
+    let _mock = mock_any(
+        &mut server,
+        "GET",
+        r#"{"data":[{"id":"p1","type":"llm_obs_projects"}]}"#,
+    )
+    .await;
+    let result = crate::commands::llm_obs::projects_list(&cfg).await;
+    assert!(
+        result.is_ok(),
+        "should tolerate missing nullable fields: {:?}",
+        result.err()
+    );
     cleanup_env();
     std::env::remove_var("DD_TOKEN_STORAGE");
 }
@@ -2602,7 +2628,7 @@ async fn test_llm_obs_experiments_list() {
     let mut server = mockito::Server::new_async().await;
     let cfg = test_config(&server.url());
 
-    // Full response satisfying the typed LLMObsExperimentDataAttributesResponse schema.
+    // Raw HTTP path: response can have any shape; nullable fields are tolerated.
     let body = r#"{"data":[{"id":"exp-1","type":"experiments","attributes":{"name":"test-exp","config":null,"description":null,"metadata":null,"created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z","dataset_id":"ds-1","project_id":"proj-1","status":"active"}}]}"#;
     let _mock = mock_any(&mut server, "GET", body).await;
 
@@ -2624,7 +2650,18 @@ async fn test_llm_obs_experiments_list_with_filters() {
     let cfg = test_config(&server.url());
 
     let body = r#"{"data":[]}"#;
-    let _mock = mock_any(&mut server, "GET", body).await;
+    // Strict query param check: verify filter[project_id] and filter[dataset_id] are sent.
+    let _mock = server
+        .mock("GET", mockito::Matcher::Any)
+        .match_query(mockito::Matcher::AllOf(vec![
+            mockito::Matcher::UrlEncoded("filter[project_id]".into(), "proj-1".into()),
+            mockito::Matcher::UrlEncoded("filter[dataset_id]".into(), "ds-1".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(body)
+        .create_async()
+        .await;
 
     let result = crate::commands::llm_obs::experiments_list(
         &cfg,
@@ -2831,9 +2868,15 @@ async fn test_llm_obs_datasets_list() {
     let mut server = mockito::Server::new_async().await;
     let cfg = test_config(&server.url());
 
-    // Full response satisfying the typed LLMObsDatasetDataAttributesResponse schema.
+    // Raw HTTP path: verify the correct project-scoped path is called.
     let body = r#"{"data":[{"id":"ds-1","type":"datasets","attributes":{"name":"my-dataset","description":null,"metadata":null,"created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z","current_version":1}}]}"#;
-    let _mock = mock_any(&mut server, "GET", body).await;
+    let _mock = server
+        .mock("GET", "/api/v2/llm-obs/v1/projects/proj-1/datasets")
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(body)
+        .create_async()
+        .await;
 
     let result = crate::commands::llm_obs::datasets_list(&cfg, "proj-1").await;
     assert!(result.is_ok(), "datasets_list failed: {:?}", result.err());
