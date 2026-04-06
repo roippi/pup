@@ -138,7 +138,7 @@ pub fn make_bearer_client(cfg: &Config) -> Option<ClientWithMiddleware> {
 
 /// All 93 unstable operations (snake_case for the Rust DD client).
 static UNSTABLE_OPS: &[&str] = &[
-    // Incidents (16)
+    // Incidents (26)
     "v2.list_incidents",
     "v2.search_incidents",
     "v2.get_incident",
@@ -156,6 +156,18 @@ static UNSTABLE_OPS: &[&str] = &[
     "v2.get_incident_postmortem_template",
     "v2.list_incident_postmortem_templates",
     "v2.update_incident_postmortem_template",
+    // Incident Teams (5)
+    "v2.create_incident_team",
+    "v2.delete_incident_team",
+    "v2.get_incident_team",
+    "v2.list_incident_teams",
+    "v2.update_incident_team",
+    // Incident Services (5)
+    "v2.create_incident_service",
+    "v2.delete_incident_service",
+    "v2.get_incident_service",
+    "v2.list_incident_services",
+    "v2.update_incident_service",
     // Fleet Automation (14)
     "v2.list_fleet_agents",
     "v2.get_fleet_agent_info",
@@ -240,6 +252,16 @@ static UNSTABLE_OPS: &[&str] = &[
     "v2.delete_llm_obs_experiments",
     "v2.create_llm_obs_dataset",
     "v2.list_llm_obs_datasets",
+    // Logs Restriction Queries (9)
+    "v2.list_restriction_queries",
+    "v2.get_restriction_query",
+    "v2.create_restriction_query",
+    "v2.update_restriction_query",
+    "v2.delete_restriction_query",
+    "v2.list_restriction_query_roles",
+    "v2.add_role_to_restriction_query",
+    "v2.remove_role_from_restriction_query",
+    "v2.get_role_restriction_query",
     // Datasets (5)
     "v2.create_dataset",
     "v2.delete_dataset",
@@ -885,7 +907,7 @@ mod tests {
 
     #[test]
     fn test_unstable_ops_count() {
-        assert_eq!(UNSTABLE_OPS.len(), 93);
+        assert_eq!(UNSTABLE_OPS.len(), 112);
     }
 
     #[test]
