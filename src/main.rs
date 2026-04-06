@@ -4862,7 +4862,11 @@ enum OnCallSchedulesActions {
 #[derive(Subcommand)]
 enum OnCallNotificationChannelsActions {
     /// List notification channels for a user
-    List { user_id: String },
+    List {
+        /// UUID of the user to list notification channels for
+        #[arg(long)]
+        user_id: String,
+    },
     /// Get a notification channel for a user
     Get { user_id: String, channel_id: String },
     /// Create a notification channel for a user from a JSON file
@@ -4878,7 +4882,11 @@ enum OnCallNotificationChannelsActions {
 #[derive(Subcommand)]
 enum OnCallNotificationRulesActions {
     /// List notification rules for a user
-    List { user_id: String },
+    List {
+        /// UUID of the user to list notification rules for
+        #[arg(long)]
+        user_id: String,
+    },
     /// Get a notification rule for a user
     Get { user_id: String, rule_id: String },
     /// Create a notification rule for a user from a JSON file
