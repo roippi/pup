@@ -162,6 +162,25 @@ pup slos create --file slo.json
 | Error rate by service | `pup traces aggregate --query="status:error" --compute="count" --group-by="service" --from="1h"` |
 | Throughput | `pup traces aggregate --query="service:api" --compute="count" --group-by="resource_name" --from="1h"` |
 
+## Service Config
+
+Query service instance metadata — instance IDs, hostnames, and config IDs for all
+running instances of a service. Returns up to 100 instances.
+
+```bash
+# Get instance metadata for a service
+pup apm service-config get --service-name my-service
+
+# Filter by environment
+pup apm service-config get --service-name my-service --env prod
+
+# Filter by specific instance IDs
+pup apm service-config get --service-name my-service --service-instance-ids "id-1,id-2"
+```
+
+> **Note on service identity:** `service_name` and `env` come from the SDK telemetry
+> pipeline and may differ from values in the Service Catalog.
+
 ## Service Library Config
 
 Query the APM tracer configuration deployed across all running instances of a service.

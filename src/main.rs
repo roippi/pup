@@ -6581,6 +6581,12 @@ enum ApmActions {
         #[command(subcommand)]
         action: ApmTroubleshootingActions,
     },
+    /// View APM service instance configuration
+    #[command(name = "service-config")]
+    ServiceConfig {
+        #[command(subcommand)]
+        action: ApmServiceConfigActions,
+    },
     /// View APM service library configuration
     #[command(name = "service-library-config")]
     ServiceLibraryConfig {
@@ -6693,6 +6699,25 @@ enum ApmTroubleshootingActions {
         hostname: String,
         #[arg(long, help = "Time window (e.g. 4h, 24h, 1h30m)")]
         timeframe: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum ApmServiceConfigActions {
+    /// Get service instance configuration.
+    ///
+    /// Note: service_name and env reflect what the SDK telemetry pipeline reports
+    /// at runtime and may differ from values in the Service Catalog.
+    Get {
+        #[arg(long, help = "Service name (required)")]
+        service_name: String,
+        #[arg(long, help = "Environment filter")]
+        env: Option<String>,
+        #[arg(
+            long,
+            help = "Comma-separated list of service instance IDs to filter by"
+        )]
+        service_instance_ids: Option<String>,
     },
 }
 
@@ -10834,6 +10859,21 @@ async fn main_inner() -> anyhow::Result<()> {
                         timeframe,
                     } => {
                         commands::apm::troubleshooting_list(&cfg, hostname, timeframe).await?;
+                    }
+                },
+                ApmActions::ServiceConfig { action } => match action {
+                    ApmServiceConfigActions::Get {
+                        service_name,
+                        env,
+                        service_instance_ids,
+                    } => {
+                        commands::apm::service_config_get(
+                            &cfg,
+                            service_name,
+                            env,
+                            service_instance_ids,
+                        )
+                        .await?;
                     }
                 },
                 ApmActions::ServiceLibraryConfig { action } => match action {

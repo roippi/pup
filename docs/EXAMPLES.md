@@ -309,6 +309,20 @@ pup security findings search \
   --query="@severity:high"
 ```
 
+## APM Service Config
+
+### Get Service Instance Configuration
+```bash
+# Get service instance metadata (IDs, hostnames, config IDs)
+pup apm service-config get --service-name my-service
+
+# Filter by environment
+pup apm service-config get --service-name my-service --env prod
+
+# Filter by specific instance IDs
+pup apm service-config get --service-name my-service --service-instance-ids "id-1,id-2"
+```
+
 ## APM Service Library Config
 
 ### Get Service Library Configuration

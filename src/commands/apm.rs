@@ -100,6 +100,27 @@ pub async fn troubleshooting_list(
     formatter::output(cfg, &data)
 }
 
+pub async fn service_config_get(
+    cfg: &Config,
+    service_name: String,
+    env: Option<String>,
+    service_instance_ids: Option<String>,
+) -> Result<()> {
+    let mut query = vec![("service_name", service_name.as_str())];
+    let env_owned;
+    if let Some(e) = &env {
+        env_owned = e.clone();
+        query.push(("env", env_owned.as_str()));
+    }
+    let ids_owned;
+    if let Some(ids) = &service_instance_ids {
+        ids_owned = ids.clone();
+        query.push(("service_instance_ids", ids_owned.as_str()));
+    }
+    let data = client::raw_get(cfg, "/api/unstable/apm/service-config", &query).await?;
+    formatter::output(cfg, &data)
+}
+
 pub async fn service_library_config_get(
     cfg: &Config,
     service_name: String,
