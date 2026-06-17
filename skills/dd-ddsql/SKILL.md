@@ -13,7 +13,7 @@ metadata:
 
 Query Datadog data with a PostgreSQL-style SQL dialect via `pup ddsql`. DDSQL is **not** full SQL — it supports a specific, fixed subset, and queries against unknown tables/columns fail. Most failures come from inventing table or column names, or from using standard-SQL idioms DDSQL rejects. This skill exists to prevent both.
 
-## 🥇 The golden rule
+## ⚠️ The cardinal rule
 
 **Never invent table or column names, and never assume standard-SQL syntax.** Discover the schema first, consult the authoritative spec when unsure, then write the query. The spec itself repeats this: *"Never invent table/column names."*
 
@@ -51,15 +51,14 @@ echo "SELECT * FROM aws.ec2_instance LIMIT 5" | pup ddsql table --query -
 pup ddsql table --query "SELECT * FROM aws.ec2_instance LIMIT 5" -o csv > out.csv
 
 # Time window flags (for the tabular query layer; default --from 1h --to now)
-pup ddsql table --query "..." --from 24h --to now --limit 100 --offset 0
+pup ddsql table --query "..." --from 24h --to now --limit 100
 ```
 
 | Flag | Purpose |
 |------|---------|
 | `--query <STRING>` / `--query -` | Query string, or `-` to read from stdin |
 | `--from` / `--to` | Time window (`1h`, `30m`, `7d`, `now`, unix ts). Default `1h`/`now` |
-| `--limit` / `--offset` | Row cap / pagination (`table` default 50, `time-series` default 5000) |
-| `--interval` | Aggregation interval in **milliseconds** |
+| `--limit` | Row cap (`table` default 50, `time-series` default 5000) |
 | `-o json\|yaml\|table\|csv` | Output format |
 
 - **Queries run async**: pup submits, then polls until the result is ready. A short pause is normal.

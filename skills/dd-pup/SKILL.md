@@ -23,7 +23,7 @@ Pup CLI for Datadog API operations. Supports OAuth2 and API key auth.
 | Find slow traces | `pup traces search --query="@duration:>500000000" --from="1h"` |
 | List incidents | `pup incidents list` |
 | Query metrics | `pup metrics query --query "avg:system.cpu.user{*}"` |
-| Query data with SQL (DDSQL) | `pup ddsql table --query "SELECT * FROM aws.ec2_instance LIMIT 5"` (see `dd-ddsql`) |
+| Query data with SQL (DDSQL) | `pup ddsql table --query "SELECT ..."` |
 | List hosts | `pup infrastructure hosts list` |
 | Check SLOs | `pup slos list` |
 | On-call teams | `pup on-call teams list` |
@@ -93,16 +93,6 @@ pup metrics query --query "avg:system.cpu.user{*}" --from 1h
 pup metrics query --query "sum:trace.express.request.hits{service:api}" --from 1h
 pup metrics list --filter "system.*"
 ```
-
-### DDSQL (SQL queries)
-```bash
-pup ddsql spec                                              # authoritative DDSQL spec
-pup ddsql schema tables --query ec2                         # discover tables
-pup ddsql schema columns --table-id public.aws.ec2_instance # discover columns + types
-pup ddsql table --query "SELECT * FROM aws.ec2_instance LIMIT 5"
-pup ddsql time-series --query "SELECT timestamp, value, tags->'host' AS host FROM dd.metrics_timeseries('avg:system.cpu.user{*} by {host}')"
-```
-**See the `dd-ddsql` skill** for the discovery-first workflow and DDSQL-vs-standard-SQL gotchas (queries fail when you invent table/column names or use unsupported syntax).
 
 ### APM / Services
 ```bash
